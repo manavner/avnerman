@@ -535,6 +535,42 @@
       transition: all 0.3s;
     }
 
+    /* APPS & MODAL */
+    .apps-controls {
+      display: flex; flex-direction: column; gap: 16px; margin-top: 24px; align-items: center; justify-content: center;
+    }
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(5px);
+      display: none; justify-content: center; align-items: center; z-index: 1000;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-content {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 32px; width: 90%;
+      max-width: 500px; max-height: 80vh; overflow-y: auto; position: relative;
+    }
+    .modal-close {
+      position: absolute; top: 16px; right: 16px; background: none; border: none;
+      color: var(--text-dim); font-size: 1.5rem; cursor: pointer;
+    }
+    .app-input-group { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .app-input-group input {
+      flex: 1; min-width: 120px; padding: 10px 12px; background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border); color: var(--text); border-radius: 6px;
+      font-family: 'Rajdhani', sans-serif;
+    }
+    .app-list-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.1); gap: 12px;
+    }
+    .app-list-item a { color: var(--accent2); text-decoration: none; word-break: break-all; }
+    .remove-btn {
+      color: #ff4444; background: none; border: none; font-weight: bold;
+      cursor: pointer; padding: 4px; border-radius: 4px; transition: 0.2s;
+    }
+    .remove-btn:hover { background: rgba(255, 68, 68, 0.1); }
+
     /* DIVIDER LINE */
     .divider {
       width: 60px;
@@ -588,6 +624,7 @@
       <li><a href="#" onclick="showSection('home')" data-i18n="nav_home">Home</a></li>
       <li><a href="#" onclick="showSection('about')" data-i18n="nav_about">About</a></li>
       <li><a href="#" onclick="showSection('projects')" data-i18n="nav_projects">Projects</a></li>
+      <li><a href="#" onclick="showSection('apps')" data-i18n="nav_apps">Apps</a></li>
       <li><a href="#" onclick="showSection('music')" data-i18n="nav_music">Music</a></li>
       <li><a href="#" onclick="showSection('privacy')" data-i18n="nav_privacy">Privacy</a></li>
     </ul>
@@ -606,7 +643,11 @@
     </div>
     <h1 class="hero-title" data-i18n="hero_title">Digital Dreams</h1>
     <p class="hero-sub" data-i18n="hero_sub">Music · Apps · Creativity · Joy</p>
-    <button class="cta-btn" onclick="showSection('projects')" data-i18n="hero_cta">Explore Projects</button>
+    <div class="apps-controls">
+      <button class="cta-btn" onclick="showSection('projects')" data-i18n="hero_cta">Explore Projects</button>
+      <button class="cta-btn" onclick="showSection('apps')" data-i18n="hero_apps" style="background: linear-gradient(135deg, var(--accent2), #0088ff); color: #fff;">Useful Apps</button>
+      <button class="cta-btn" onclick="openManageAppsModal()" data-i18n="hero_manage_apps" style="background: transparent; border: 1px solid var(--accent); color: var(--accent); box-shadow: none;">Manage Apps</button>
+    </div>
   </section>
 
   <!-- ABOUT -->
@@ -674,6 +715,34 @@
       </div>
   </section>
 
+  <!-- APPS -->
+  <section id="apps">
+    <h2 class="section-title" data-i18n="apps_title">Useful Apps</h2>
+    <div class="divider"></div>
+    <p class="section-sub" data-i18n="apps_sub">My collection of tiny tools</p>
+    <div class="projects-grid" id="customAppsGrid">
+      <!-- Custom Apps will be injected here -->
+    </div>
+  </section>
+
+  <!-- MANAGE APPS MODAL -->
+  <div id="manageAppsModal" class="modal-overlay">
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeManageAppsModal()">×</button>
+      <h2 style="font-family: 'Orbitron', monospace; color: var(--accent2); margin-bottom: 20px; font-size: 1.4rem;" data-i18n="manage_apps_title">Manage Apps</h2>
+      
+      <div class="app-input-group">
+        <input type="text" id="newAppName" placeholder="App Name" data-i18n-placeholder="app_name_ph">
+        <input type="url" id="newAppUrl" placeholder="https://..." data-i18n-placeholder="app_url_ph">
+        <button class="cta-btn" onclick="addCustomApp()" style="padding: 10px 20px;" data-i18n="add_app">Add</button>
+      </div>
+
+      <div id="manageAppsList" style="margin-top: 24px;">
+        <!-- List injected here -->
+      </div>
+    </div>
+  </div>
+
   <!-- MUSIC -->
   <section id="music">
     <h2 class="section-title" data-i18n="music_title">My Music</h2>
@@ -707,8 +776,8 @@
     // ---- TRANSLATIONS ----
     const i18n = {
       en: {
-        nav_home: "Home", nav_about: "About", nav_projects: "Projects", nav_music: "Music", nav_privacy: "Privacy",
-        hero_title: "Digital Dreams", hero_sub: "Music · Apps · Creativity · Joy", hero_cta: "Explore Projects",
+        nav_home: "Home", nav_about: "About", nav_projects: "Projects", nav_apps: "Apps", nav_music: "Music", nav_privacy: "Privacy",
+        hero_title: "Digital Dreams", hero_sub: "Music · Apps · Creativity · Joy", hero_cta: "Explore Projects", hero_apps: "Useful Apps", hero_manage_apps: "Manage Apps",
         about_tagline: "A retired dreamer, music tinkerer, and joyful digital creator",
         about_p1: "Hi! I'm Avner – a happy pensioner who decided that retirement is just the beginning. Out of passion for music, creativity, and good vibes, I create music apps, small tools, fun experiments, and sometimes just follow my wildest dreams — and build them.",
         about_p2: "Not for money. Not for fame. Just for the fun. And maybe, a little bit, for a better world.",
@@ -720,6 +789,7 @@
         proj_sub_name: "Auto Subtitle Translator", proj_sub_desc: "Automatic subtitle translation tool for videos",
         proj_stories_name: "Story Player", proj_stories_desc: "Interactive stories to read and listen to",
         proj_music_name: "My Music", proj_music_desc: "Listen to my music on YouTube and Spotify",
+        apps_title: "Useful Apps", apps_sub: "My collection of tiny tools", manage_apps_title: "Manage Apps", app_name_ph: "App Name", app_url_ph: "App URL", add_app: "Add",
         music_title: "My Music", music_sub: "Find my music on your favorite platform",
         priv_title: "🔒 Privacy Policy",
         priv_p1: "This website is a personal project created for fun and creativity. We do not collect, store, or sell any personal data.",
@@ -728,8 +798,8 @@
         priv_p4: "Questions? Write to: manavner@gmail.com"
       },
       he: {
-        nav_home: "בית", nav_about: "אודות", nav_projects: "פרויקטים", nav_music: "מוזיקה", nav_privacy: "פרטיות",
-        hero_title: "חלומות דיגיטליים", hero_sub: "מוזיקה · אפליקציות · יצירה · שמחה", hero_cta: "גלה פרויקטים",
+        nav_home: "בית", nav_about: "אודות", nav_projects: "פרויקטים", nav_apps: "אפליקציות", nav_music: "מוזיקה", nav_privacy: "פרטיות",
+        hero_title: "חלומות דיגיטליים", hero_sub: "מוזיקה · אפליקציות · יצירה · שמחה", hero_cta: "גלה פרויקטים", hero_apps: "אפליקציות שימושיות", hero_manage_apps: "ניהול אפליקציות",
         about_tagline: "גמלאי חולם, מתעסק במוזיקה, ויוצר דיגיטלי שמח",
         about_p1: "היי! אני אבנר – גמלאי מאושר שהחליט שהפרישה היא רק ההתחלה. מתוך אהבה למוזיקה, יצירתיות ואווירה טובה, אני יוצר אפליקציות מוזיקה, כלים קטנים, ניסויים כיפיים, ולפעמים פשוט עוקב אחרי החלומות הכי פרועים שלי — ובונה אותם.",
         about_p2: "לא בשביל כסף. לא בשביל תהילה. רק בשביל הכיף. ואולי, קצת, בשביל עולם טוב יותר.",
@@ -741,6 +811,7 @@
         proj_sub_name: "תרגום כתוביות אוטומטי", proj_sub_desc: "כלי לתרגום אוטומטי של כתוביות לסרטונים",
         proj_stories_name: "נגן סיפורים", proj_stories_desc: "סיפורים אינטראקטיביים לקריאה והאזנה",
         proj_music_name: "המוזיקה שלי", proj_music_desc: "האזן למוזיקה שלי ב-YouTube וב-Spotify",
+        apps_title: "אפליקציות שימושיות", apps_sub: "האוסף שלי לכלים קטנים", manage_apps_title: "ניהול אפליקציות", app_name_ph: "שם האפליקציה", app_url_ph: "קישור (URL)", add_app: "הוסף",
         music_title: "המוזיקה שלי", music_sub: "מצא את המוזיקה שלי בפלטפורמה המועדפת עליך",
         priv_title: "🔒 מדיניות פרטיות",
         priv_p1: "אתר זה הוא פרויקט אישי שנוצר לשם כיף ויצירתיות. אנחנו לא אוספים, מאחסנים או מוכרים שום מידע אישי.",
@@ -749,8 +820,8 @@
         priv_p4: "שאלות? כתוב ל: manavner@gmail.com"
       },
       ru: {
-        nav_home: "Главная", nav_about: "Обо мне", nav_projects: "Проекты", nav_music: "Музыка", nav_privacy: "Конфиденциальность",
-        hero_title: "Цифровые мечты", hero_sub: "Музыка · Приложения · Творчество · Радость", hero_cta: "Смотреть проекты",
+        nav_home: "Главная", nav_about: "Обо мне", nav_projects: "Проекты", nav_apps: "Приложения", nav_music: "Музыка", nav_privacy: "Конфиденциальность",
+        hero_title: "Цифровые мечты", hero_sub: "Музыка · Приложения · Творчество · Радость", hero_cta: "Смотреть проекты", hero_apps: "Полезные приложения", hero_manage_apps: "Управление приложениями",
         about_tagline: "Мечтатель на пенсии, любитель музыки и радостный цифровой творец",
         about_p1: "Привет! Я Авнер — счастливый пенсионер, который решил, что выход на пенсию — это только начало. Из любви к музыке, творчеству и хорошей атмосфере я создаю музыкальные приложения, небольшие инструменты, весёлые эксперименты и иногда просто следую своим самым смелым мечтам — и воплощаю их.",
         about_p2: "Не ради денег. Не ради славы. Просто ради удовольствия. И, может быть, немного — ради лучшего мира.",
@@ -762,6 +833,7 @@
         proj_sub_name: "Автоматический переводчик субтитров", proj_sub_desc: "Инструмент для автоматического перевода субтитров к видео",
         proj_stories_name: "Плеер историй", proj_stories_desc: "Интерактивные истории для чтения и прослушивания",
         proj_music_name: "Моя музыка", proj_music_desc: "Слушайте мою музыку на YouTube и Spotify",
+        apps_title: "Полезные приложения", apps_sub: "Моя коллекция небольших инструментов", manage_apps_title: "Управление приложениями", app_name_ph: "Название", app_url_ph: "Ссылка (URL)", add_app: "Добавить",
         music_title: "Моя музыка", music_sub: "Найдите мою музыку на вашей любимой платформе",
         priv_title: "🔒 Политика конфиденциальности",
         priv_p1: "Этот сайт — личный проект, созданный для удовольствия и творчества. Мы не собираем, не храним и не продаём никакие личные данные.",
@@ -787,6 +859,13 @@
           el.textContent = i18n[lang][key];
         }
       });
+
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        if (i18n[lang] && i18n[lang][key]) {
+          el.placeholder = i18n[lang][key];
+        }
+      });
     }
 
     function showSection(id) {
@@ -799,6 +878,95 @@
     function toggleMenu() {
       document.getElementById('navLinks').classList.toggle('open');
     }
+
+    // ---- CUSTOM APPS LOGIC ----
+    let customApps = JSON.parse(localStorage.getItem('avner_custom_apps')) || [];
+
+    function saveCustomApps() {
+      localStorage.setItem('avner_custom_apps', JSON.stringify(customApps));
+      renderCustomApps();
+    }
+
+    function renderCustomApps() {
+      const grid = document.getElementById('customAppsGrid');
+      const list = document.getElementById('manageAppsList');
+      if(grid) grid.innerHTML = '';
+      if(list) list.innerHTML = '';
+
+      customApps.forEach((app, index) => {
+        // Render in Grid
+        if(grid) {
+          const card = document.createElement('div');
+          card.className = 'project-card';
+          card.onclick = () => window.open(app.url, '_blank');
+          card.innerHTML = `
+            <span class="project-icon">📱</span>
+            <div class="project-name">${app.name}</div>
+            <p class="project-desc" style="word-break: break-all;">${app.url}</p>
+          `;
+          grid.appendChild(card);
+        }
+
+        // Render in Manage List
+        if(list) {
+          const item = document.createElement('div');
+          item.className = 'app-list-item';
+          item.innerHTML = `
+            <div style="flex:1; margin-right: 12px;">
+              <strong style="color:var(--text);">${app.name}</strong><br>
+              <a href="${app.url}" target="_blank" style="font-size: 0.85rem;">${app.url}</a>
+            </div>
+            <button class="remove-btn" onclick="removeCustomApp(${index})">✕</button>
+          `;
+          list.appendChild(item);
+        }
+      });
+
+      // Show message if grid is empty
+      if(grid && customApps.length === 0) {
+        grid.innerHTML = '<p style="color: var(--text-dim); text-align: center; width: 100%;" data-i18n="apps_empty">No apps added yet. Click "Manage Apps" to add some!</p>';
+        const isHebrew = currentLang === 'he';
+        const isRussian = currentLang === 'ru';
+        const p = grid.querySelector('p');
+        if(isHebrew) p.textContent = 'עדיין אין אפליקציות. לחץ על "ניהול אפליקציות" כדי להוסיף!';
+        if(isRussian) p.textContent = 'Приложений пока нет. Нажмите "Управление приложениями", чтобы добавить!';
+      }
+    }
+
+    function addCustomApp() {
+      const nameInp = document.getElementById('newAppName');
+      const urlInp = document.getElementById('newAppUrl');
+      const name = nameInp.value.trim();
+      let url = urlInp.value.trim();
+
+      if(!name || !url) return alert('Please enter both name and URL / נא למלא את כל השדות');
+      if(!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+
+      customApps.push({ name, url });
+      saveCustomApps();
+      nameInp.value = '';
+      urlInp.value = '';
+    }
+
+    function removeCustomApp(index) {
+      if(confirm('Remove this app? / האם להסיר אפליקציה זו?')) {
+        customApps.splice(index, 1);
+        saveCustomApps();
+      }
+    }
+
+    function openManageAppsModal() {
+      document.getElementById('manageAppsModal').classList.add('active');
+    }
+
+    function closeManageAppsModal() {
+      document.getElementById('manageAppsModal').classList.remove('active');
+    }
+
+    // Init custom apps
+    renderCustomApps();
   </script>
 </body>
 
