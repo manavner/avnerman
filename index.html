@@ -196,6 +196,18 @@
       opacity: 0.5;
     }
 
+    .hero-name {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(2rem, 6vw, 4rem);
+      font-weight: 900;
+      line-height: 1.1;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-bottom: 8px;
+      animation: fadeUp 0.8s ease both;
+    }
+
     .hero-title {
       font-family: 'Orbitron', monospace;
       font-size: clamp(2rem, 6vw, 4rem);
@@ -637,9 +649,10 @@
   <!-- HOME -->
   <section id="home" class="active">
     <div class="hero-img-wrap">
-      <img src="ChatGPT%20Image%20Feb%2028%2C%202026%2C%2007_15_54%20AM.png" alt="Avner Man – Embarking"
+      <img src="AVNERMANICO.png" alt="Avner Man – Embarking"
         onerror="this.style.display='none'">
     </div>
+    <p class="hero-name" data-i18n="hero_name">Avner Man</p>
     <h1 class="hero-title" data-i18n="hero_title">Digital Dreams</h1>
     <p class="hero-sub" data-i18n="hero_sub">Music · Apps · Creativity · Joy</p>
     <div class="apps-controls">
@@ -758,7 +771,7 @@
     const i18n = {
       en: {
         nav_home: "Home", nav_about: "About", nav_projects: "Projects", nav_apps: "Apps", nav_music: "Music", nav_privacy: "Privacy",
-        hero_title: "Digital Dreams", hero_sub: "Music · Apps · Creativity · Joy", hero_cta: "Explore Projects", hero_apps: "Useful Apps", hero_manage_apps: "Manage Apps",
+        hero_name: "Avner Man", hero_title: "Digital Dreams", hero_sub: "Music · Apps · Creativity · Joy", hero_cta: "Explore Projects", hero_apps: "Useful Apps", hero_manage_apps: "Manage Apps",
         about_tagline: "A retired dreamer, music tinkerer, and joyful digital creator",
         about_p1: "Hi! I'm Avner – a happy pensioner who decided that retirement is just the beginning. Out of passion for music, creativity, and good vibes, I create music apps, small tools, fun experiments, and sometimes just follow my wildest dreams — and build them.",
         about_p2: "Not for money. Not for fame. Just for the fun. And maybe, a little bit, for a better world.",
@@ -780,7 +793,7 @@
       },
       he: {
         nav_home: "בית", nav_about: "אודות", nav_projects: "פרויקטים", nav_apps: "אפליקציות", nav_music: "מוזיקה", nav_privacy: "פרטיות",
-        hero_title: "חלומות דיגיטליים", hero_sub: "מוזיקה · אפליקציות · יצירה · שמחה", hero_cta: "גלה פרויקטים", hero_apps: "אפליקציות שימושיות", hero_manage_apps: "ניהול אפליקציות",
+        hero_name: "אבנר מן", hero_title: "חלומות דיגיטליים", hero_sub: "מוזיקה · אפליקציות · יצירה · שמחה", hero_cta: "גלה פרויקטים", hero_apps: "אפליקציות שימושיות", hero_manage_apps: "ניהול אפליקציות",
         about_tagline: "גמלאי חולם, מתעסק במוזיקה, ויוצר דיגיטלי שמח",
         about_p1: "היי! אני אבנר – גמלאי מאושר שהחליט שהפרישה היא רק ההתחלה. מתוך אהבה למוזיקה, יצירתיות ואווירה טובה, אני יוצר אפליקציות מוזיקה, כלים קטנים, ניסויים כיפיים, ולפעמים פשוט עוקב אחרי החלומות הכי פרועים שלי — ובונה אותם.",
         about_p2: "לא בשביל כסף. לא בשביל תהילה. רק בשביל הכיף. ואולי, קצת, בשביל עולם טוב יותר.",
