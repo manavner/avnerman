@@ -583,6 +583,80 @@
     }
     .remove-btn:hover { background: rgba(255, 68, 68, 0.1); }
 
+    /* secret-card visibility is managed entirely by JS */
+
+    /* DEV MODE BADGE */
+    .dev-mode-badge {
+      position: fixed;
+      bottom: 70px;
+      right: 16px;
+      background: rgba(255, 140, 0, 0.15);
+      border: 1px solid rgba(255, 140, 0, 0.4);
+      color: var(--accent);
+      font-family: 'Orbitron', monospace;
+      font-size: 0.65rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      letter-spacing: 1px;
+      z-index: 200;
+      display: none;
+    }
+    .dev-mode-badge.visible { display: block; }
+
+    /* DEV MODE BUTTON in footer */
+    .dev-mode-btn {
+      background: none;
+      border: 1px solid rgba(255, 140, 0, 0.3);
+      color: rgba(255, 140, 0, 0.5);
+      font-family: 'Orbitron', monospace;
+      font-size: 0.7rem;
+      padding: 4px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+    }
+    .dev-mode-btn:hover,
+    .dev-mode-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(255, 140, 0, 0.1);
+    }
+
+    /* CARD VISIBILITY INDICATOR (DEV MODE) */
+    .card-indicator {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .card-indicator:hover { transform: scale(1.2); }
+    .card-indicator.is-visible {
+      width: 16px;
+      height: 16px;
+      background: #00c864;
+      border: 2px solid #00e070;
+      border-radius: 50%;
+      box-shadow: 0 0 8px rgba(0, 200, 100, 0.6);
+    }
+    .card-indicator.is-hidden {
+      width: 22px;
+      height: 22px;
+      background: transparent;
+      border: 2px solid var(--accent);
+      border-radius: 5px;
+    }
+
+    /* DEV MODE PASSWORD MODAL */
+    .dev-password-error {
+      color: #ff4444;
+      font-size: 0.85rem;
+      margin-top: 8px;
+      display: none;
+    }
+
     /* DIVIDER LINE */
     .divider {
       width: 60px;
@@ -696,62 +770,62 @@
     <p class="section-sub" data-i18n="proj_sub">Click any project to open it</p>
     <div class="projects-grid">
 
-      <div class="project-card" onclick="window.open('https://salsa-steps-web.vercel.app/', '_blank')">
+      <div class="project-card" data-secret-id="salsa-web" onclick="window.open('https://salsa-steps-web.vercel.app/', '_blank')">
         <img src="https://salsa-steps-web.vercel.app/icon.png" alt="Salsa"
           style="width: 64px; height: 64px; border-radius: 12px;" onerror="this.outerHTML='<span class=\'project-icon\'>💃</span>'">
         <div class="project-name" data-i18n="proj_salsa_name">Salsa Steps Catalog</div>
         <p class="project-desc" data-i18n="proj_salsa_desc">A full catalog of Salsa dance steps with descriptions and videos</p>
       </div>
 
-      <div class="project-card" onclick="window.open('https://salsaflow-dj.vercel.app/', '_blank')">
+      <div class="project-card" data-secret-id="salsaflow" onclick="window.open('https://salsaflow-dj.vercel.app/', '_blank')">
         <img src="SalsaFlowDj.png" alt="Salsa Flow DJ" style="width: 64px; height: 64px; border-radius: 12px;" onerror="this.outerHTML='<span class=\'project-icon\'>🎧</span>'">
         <div class="project-name" data-i18n="proj_salsaflow_name">Salsa Flow DJ</div>
         <p class="project-desc" data-i18n="proj_salsaflow_desc">Salsa Flow DJ – mix and play salsa music</p>
       </div>
 
-<div class="project-card" onclick="window.open('https://you-tube-playlist-tool.vercel.app/', '_blank')">
+<div class="project-card secret-card" data-secret-id="yttool" onclick="window.open('https://you-tube-playlist-tool.vercel.app/', '_blank')">
         <span class="project-icon">▶️</span>
         <div class="project-name" data-i18n="proj_yttool_name">YouTube Playlist Tool</div>
         <p class="project-desc" data-i18n="proj_yttool_desc">Tool for managing and editing YouTube playlists</p>
       </div>
 
-      <div class="project-card" onclick="window.open('https://avner-songs-web.vercel.app/', '_blank')">
+      <div class="project-card" data-secret-id="avner-songs" onclick="window.open('https://avner-songs-web.vercel.app/', '_blank')">
         <span class="project-icon">🎵</span>
         <div class="project-name" data-i18n="proj_music_name">My Music</div>
         <p class="project-desc" data-i18n="proj_music_desc">Listen to my music on YouTube and Spotify</p>
       </div>
 
-      <div class="project-card" onclick="window.open('https://media-noche-karmiel.vercel.app/', '_blank')">
+      <div class="project-card" data-secret-id="medianoche" onclick="window.open('https://media-noche-karmiel.vercel.app/', '_blank')">
         <span class="project-icon">🌙</span>
         <div class="project-name" data-i18n="proj_medianoche_name">Media Noche Karmiel</div>
         <p class="project-desc" data-i18n="proj_medianoche_desc">Media Noche Karmiel project</p>
       </div>
 
-      <div class="project-card" onclick="window.open('https://calories-app-manavner-9849s-projects.vercel.app/', '_blank')">
+      <div class="project-card" data-secret-id="calories" onclick="window.open('https://calories-app-manavner-9849s-projects.vercel.app/', '_blank')">
         <span class="project-icon">🥗</span>
         <div class="project-name" data-i18n="proj_calories_name">Calories App</div>
         <p class="project-desc" data-i18n="proj_calories_desc">Track your daily calories</p>
       </div>
 
-      <div class="project-card" onclick="window.open('https://clories-data.vercel.app/', '_blank')">
+      <div class="project-card" data-secret-id="cloriesdata" onclick="window.open('https://clories-data.vercel.app/', '_blank')">
         <span class="project-icon">📊</span>
         <div class="project-name" data-i18n="proj_cloriesdata_name">Clories Data</div>
         <p class="project-desc" data-i18n="proj_cloriesdata_desc">Calorie data and nutrition information</p>
       </div>
 
-      <div class="project-card" onclick="window.open('https://gad-dgani-website.vercel.app/', '_blank')">
+      <div class="project-card" data-secret-id="gad" onclick="window.open('https://gad-dgani-website.vercel.app/', '_blank')">
         <span class="project-icon">🌐</span>
         <div class="project-name" data-i18n="proj_gad_name">Gad Dgani Website</div>
         <p class="project-desc" data-i18n="proj_gad_desc">Website for Gad Dgani</p>
       </div>
 
-      <div class="project-card" onclick="window.open('https://batel-website.vercel.app/', '_blank')">
+      <div class="project-card" data-secret-id="batel" onclick="window.open('https://batel-website.vercel.app/', '_blank')">
         <span class="project-icon">✨</span>
         <div class="project-name" data-i18n="proj_batel_name">Batel Website</div>
         <p class="project-desc" data-i18n="proj_batel_desc">Batel's personal website</p>
       </div>
 
-      <div class="project-card" onclick="window.open('https://claude-code-replace.vercel.app/', '_blank')">
+      <div class="project-card" data-secret-id="claudereplace" onclick="window.open('https://claude-code-replace.vercel.app/', '_blank')">
         <span class="project-icon">🤖</span>
         <div class="project-name" data-i18n="proj_claudereplace_name">Claude Code Replace</div>
         <p class="project-desc" data-i18n="proj_claudereplace_desc">Claude Code helper tool</p>
@@ -803,6 +877,23 @@
     </div>
   </section>
 
+  <!-- DEV MODE BADGE -->
+  <div class="dev-mode-badge" id="devModeBadge">🔓 DEV MODE</div>
+
+  <!-- DEV MODE PASSWORD MODAL -->
+  <div id="devModeModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 340px;">
+      <button class="modal-close" onclick="closeDevModeModal()">×</button>
+      <h2 style="font-family:'Orbitron',monospace; color:var(--accent); margin-bottom:20px; font-size:1.2rem;">🔐 DEV MODE</h2>
+      <div class="app-input-group" style="flex-direction:column;">
+        <input type="password" id="devModePasswordInput" placeholder="Enter password..." style="flex:1; padding:10px 12px; background:rgba(0,0,0,0.3); border:1px solid var(--border); color:var(--text); border-radius:6px; font-family:'Rajdhani',sans-serif; font-size:1rem;"
+          onkeydown="if(event.key==='Enter') checkDevPassword()">
+        <div class="dev-password-error" id="devPasswordError">❌ Wrong password</div>
+      </div>
+      <button class="cta-btn" onclick="checkDevPassword()" style="margin-top:16px; width:100%; padding:12px;">ENTER</button>
+    </div>
+  </div>
+
   <!-- FOOTER -->
   <footer style="
     text-align: center;
@@ -813,6 +904,8 @@
     font-size: 0.85rem;
     font-family: 'Rajdhani', sans-serif;
   ">
+    <button class="dev-mode-btn" id="devModeFooterBtn" onclick="toggleDevMode()">DEV MODE</button>
+    <span style="margin: 0 12px;">·</span>
     <span>© 2025 Avner Man</span>
     <span style="margin: 0 12px;">·</span>
     <a
@@ -1043,6 +1136,95 @@
 
     // Init custom apps
     renderCustomApps();
+
+    // ---- DEV MODE ----
+    const DEV_PASSWORD = '1991';
+    let devModeActive = false;
+    // overrides: {id: true=visible, false=hidden} — overrides the default
+    let cardOverrides = JSON.parse(localStorage.getItem('avner_card_overrides') || '{}');
+
+    function saveOverrides() {
+      localStorage.setItem('avner_card_overrides', JSON.stringify(cardOverrides));
+    }
+
+    function isVisibleInNormal(card) {
+      const id = card.getAttribute('data-secret-id');
+      const isSecret = card.classList.contains('secret-card');
+      if (id && cardOverrides.hasOwnProperty(id)) return cardOverrides[id];
+      return !isSecret; // default: secret→hidden, regular→visible
+    }
+
+    function renderAllCards() {
+      document.querySelectorAll('.project-card[data-secret-id]').forEach(card => {
+        const id = card.getAttribute('data-secret-id');
+        const visibleNormal = isVisibleInNormal(card);
+
+        // Visibility — JS controls display for all cards
+        if (devModeActive) {
+          card.style.display = '';
+        } else {
+          card.style.display = visibleNormal ? '' : 'none';
+        }
+
+        // Remove old indicator
+        const old = card.querySelector('.card-indicator');
+        if (old) old.remove();
+
+        if (devModeActive) {
+          const dot = document.createElement('div');
+          dot.className = 'card-indicator ' + (visibleNormal ? 'is-visible' : 'is-hidden');
+          dot.title = visibleNormal ? 'נראה ללא DEV MODE — לחץ להסתיר' : 'מוסתר ללא DEV MODE — לחץ להציג';
+          dot.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const newVal = !isVisibleInNormal(card);
+            cardOverrides[id] = newVal;
+            saveOverrides();
+            renderAllCards();
+          });
+          card.appendChild(dot);
+        }
+      });
+
+      document.getElementById('devModeBadge').classList.toggle('visible', devModeActive);
+      const btn = document.getElementById('devModeFooterBtn');
+      if (btn) btn.classList.toggle('active', devModeActive);
+    }
+
+    function toggleDevMode() {
+      if (devModeActive) {
+        devModeActive = false;
+        renderAllCards();
+      } else {
+        openDevModeModal();
+      }
+    }
+
+    function openDevModeModal() {
+      document.getElementById('devModeModal').classList.add('active');
+      document.getElementById('devModePasswordInput').value = '';
+      document.getElementById('devPasswordError').style.display = 'none';
+      setTimeout(() => document.getElementById('devModePasswordInput').focus(), 100);
+    }
+
+    function closeDevModeModal() {
+      document.getElementById('devModeModal').classList.remove('active');
+    }
+
+    function checkDevPassword() {
+      const input = document.getElementById('devModePasswordInput').value;
+      if (input === DEV_PASSWORD) {
+        devModeActive = true;
+        closeDevModeModal();
+        renderAllCards();
+      } else {
+        document.getElementById('devPasswordError').style.display = 'block';
+        document.getElementById('devModePasswordInput').value = '';
+        document.getElementById('devModePasswordInput').focus();
+      }
+    }
+
+    // Init
+    renderAllCards();
   </script>
 </body>
 
