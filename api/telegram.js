@@ -5,7 +5,7 @@
 //   "הוסף פגישה ..."      → add calendar event (requires Google API credentials)
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ICAL_URL = process.env.ICAL_URL || "https://calendar.google.com/calendar/ical/manavner%40gmail.com/private-ab0f0c6d21e5f9f2fad7b764e7d356c6/basic.ics";
+const ICAL_URL = process.env.ICAL_URL;
 const CHAT_ID = "1532243300";
 const TRIGGER_WORDS = ["היי", "הי", "hi", "hey", "hello", "שלום", "briefing", "סיכום"];
 
