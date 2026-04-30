@@ -113,9 +113,25 @@ export default async function handler(req, res) {
       // Send "loading" message immediately
       await sendTelegram(chatId, "⏳ רגע, אוסף מידע...");
 
-      // Build and send briefing
-      const briefing = await buildBriefing();
-      await sendTelegram(chatId, briefing);
+      // Build and send briefing in two messages to avoid 4096 char limit
+      const [weather, news, aiNews] = await Promise.all([
+        getWeather(),
+        getNews(),
+        getAINews(),
+      ]);
+
+      const now = new Date().toLocaleString("he-IL", {
+        timeZone: "Asia/Jerusalem",
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      });
+
+      // Message 1: header + weather + news
+      await sendTelegram(chatId, `🌅 <b>בוקר טוב אבנר!</b>\n${now}\n\n${weather}\n\n${news}`);
+
+      // Message 2: AI news
+      await sendTelegram(chatId, aiNews);
     }
 
     return res.status(200).json({ ok: true });
