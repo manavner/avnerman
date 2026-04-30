@@ -52,6 +52,17 @@ async function getNews() {
   }
 }
 
+async function translateToHebrew(text) {
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=he&dt=t&q=${encodeURIComponent(text)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    return data[0].map(s => s[0]).join("");
+  } catch {
+    return text; // fallback to original if translation fails
+  }
+}
+
 async function getAINews() {
   try {
     const res = await fetch(
@@ -65,10 +76,14 @@ async function getAINews() {
     const plainTitles = [...xml.matchAll(/<title>([^<]{10,})<\/title>/g)].map(m => m[1]);
     const raw = cdataTitles.length > 0 ? cdataTitles : plainTitles;
 
-    const titles = raw
-      .filter(t => !t.includes("TechCrunch")) // skip feed title
+    const englishTitles = raw
+      .filter(t => !t.includes("TechCrunch"))
       .slice(0, 3)
-      .map(t => `• ${t.replace(/&amp;/g, "&").replace(/&#8217;/g, "'").replace(/&#8220;/g, '"').replace(/&#8221;/g, '"')}`);
+      .map(t => t.replace(/&amp;/g, "&").replace(/&#8217;/g, "'").replace(/&#8220;/g, '"').replace(/&#8221;/g, '"'));
+
+    // Translate all titles in parallel
+    const hebrewTitles = await Promise.all(englishTitles.map(translateToHebrew));
+    const titles = hebrewTitles.map(t => `• ${t}`);
 
     return `🤖 <b>חדשות AI בעולם</b>\n${titles.join("\n")}`;
   } catch {
