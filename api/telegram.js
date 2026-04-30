@@ -54,15 +54,22 @@ async function getNews() {
 
 async function getAINews() {
   try {
-    // TechCrunch AI RSS
     const res = await fetch(
       "https://techcrunch.com/category/artificial-intelligence/feed/",
       { headers: { "User-Agent": "Mozilla/5.0" } }
     );
     const xml = await res.text();
-    const titles = [...xml.matchAll(/<title><!\[CDATA\[(.+?)\]\]><\/title>/g)]
-      .slice(1, 4)
-      .map((m) => `• ${m[1]}`);
+
+    // Support both CDATA and plain title formats
+    const cdataTitles = [...xml.matchAll(/<title><!\[CDATA\[(.+?)\]\]><\/title>/g)].map(m => m[1]);
+    const plainTitles = [...xml.matchAll(/<title>([^<]{10,})<\/title>/g)].map(m => m[1]);
+    const raw = cdataTitles.length > 0 ? cdataTitles : plainTitles;
+
+    const titles = raw
+      .filter(t => !t.includes("TechCrunch")) // skip feed title
+      .slice(0, 3)
+      .map(t => `• ${t.replace(/&amp;/g, "&").replace(/&#8217;/g, "'").replace(/&#8220;/g, '"').replace(/&#8221;/g, '"')}`);
+
     return `🤖 <b>חדשות AI בעולם</b>\n${titles.join("\n")}`;
   } catch {
     return "🤖 <b>חדשות AI בעולם</b>\nלא זמין כרגע";
