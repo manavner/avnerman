@@ -3,6 +3,7 @@
 //   "היי" / "hi"      → daily briefing
 //   "פגישה"           → interactive calendar event creation (multi-step)
 //   "אושו: [שאלה]"   → Osho wisdom via Gemini AI
+//   "מתכון: [מאכל]"  → recipe for a specific dish
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ICAL_URL = process.env.ICAL_URL;
@@ -474,6 +475,7 @@ export default async function handler(req, res) {
         `🌅 <b>היי / hi / שלום</b>\nסקירת בוקר מלאה — ציטוטים, מזג אוויר, לוח שנה, מיילים, חדשות ישראל וחדשות AI\n\n` +
         `📅 <b>פגישה</b>\nיצירת אירוע חדש ביומן Google בשלבים\n\n` +
         `🕉️ <b>אושו - [שאלה]</b>\nתשובה מעמיקה בסגנון אושו\nדוגמה: <i>אושו - מהי אהבה?</i>\n\n` +
+        `🍳 <b>מתכון - [מאכל]</b>\nקבל מתכון למאכל ספציפי\nדוגמה: <i>מתכון - עוגת תפוחים</i>\n\n` +
         `😄 <b>בדיחה</b>\n2 בדיחות אקראיות (עברית + אנגלית)\n\n` +
         `😄 <b>בדיחה - [נושא]</b>\n2 בדיחות על נושא ספציפי\nדוגמה: <i>בדיחה - רופאים</i>\n\n` +
         `⚙️ <b>claude - [תיאור]</b>\nהוספת יכולת חדשה לבוט אוטומטית\nדוגמה: <i>claude - הוסף פקודה שמחזירה מתכון</i>\n\n` +
@@ -496,6 +498,37 @@ export default async function handler(req, res) {
       } catch (e) {
         await sendTelegram(chatId, "❌ שגיאה בחיבור ל-Gemini");
         console.error("Osho error:", e);
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Command: Recipe ──
+    if (/^מתכון\s*[:\-]/u.test(text)) {
+      const dish = text.replace(/^מתכון\s*[:\-]\s*/u, "").trim();
+      if (!dish) {
+        await sendTelegram(chatId, "🍳 כתוב את המאכל שאתה רוצה מתכון עבורו אחרי \"מתכון:\", לדוגמה: <i>מתכון - עוגת תפוחים</i>");
+        return res.status(200).json({ ok: true });
+      }
+      await sendTelegram(chatId, `⏳ מחפש מתכון ל${escapeHtml(dish)}...`);
+      try {
+        const gemRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `תן לי מתכון מפורט בעברית עבור ${dish}. המתכון צריך לכלול רשימת מרכיבים והוראות הכנה מפורטות. השתמש בפורמט קריא וברור.` }] }],
+              generationConfig: { temperature: 0.7, maxOutputTokens: 2000, thinkingConfig: { thinkingBudget: 0 } },
+            }),
+          }
+        );
+        const gemData = await gemRes.json();
+        const recipe = extractGeminiText(gemData);
+        if (!recipe) throw new Error("No recipe from Gemini");
+        await sendLongTelegram(chatId, `🍳 <b>מתכון ל${escapeHtml(dish)}:</b>\n\n${escapeHtml(recipe)}`);
+      } catch (e) {
+        await sendTelegram(chatId, "❌ שגיאה בקבלת המתכון. נסה שוב מאוחר יותר.");
+        console.error("Recipe error:", e);
       }
       return res.status(200).json({ ok: true });
     }
