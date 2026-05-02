@@ -418,14 +418,14 @@ export default async function handler(req, res) {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                contents: [{ parts: [{ text: `ספר לי בדיחה מצחיקה בעברית על הנושא: ${topic}. פורמט: שורה ראשונה היא ההקדמה, שורה שנייה היא הפאנץ' ליין. רק הבדיחה, ללא הסברים.` }] }],
-                generationConfig: { temperature: 1.0, maxOutputTokens: 300, thinkingConfig: { thinkingBudget: 0 } },
+                contents: [{ parts: [{ text: `ספר לי 2 בדיחות מצחיקות בעברית על הנושא: ${topic}. עבור כל בדיחה: שורה ראשונה היא ההקדמה, שורה שנייה היא הפאנץ' ליין. הפרד בין הבדיחות בשורה ריקה. רק הבדיחות, ללא כותרות או הסברים.` }] }],
+                generationConfig: { temperature: 1.0, maxOutputTokens: 500, thinkingConfig: { thinkingBudget: 0 } },
               }),
             }
           );
           const gemData = await gemRes.json();
           const jokeText = escapeHtml(extractGeminiText(gemData));
-          await sendLongTelegram(chatId, `😄 <b>בדיחה על ${escapeHtml(topic)}:</b>\n\n${jokeText}`);
+          await sendLongTelegram(chatId, `😄 <b>בדיחות על ${escapeHtml(topic)}:</b>\n\n${jokeText}`);
         } else {
           // 2 random jokes via JokeAPI
           const jokeRes = await fetch(
