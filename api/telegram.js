@@ -219,6 +219,26 @@ async function getDailyQuote() {
   } catch { return ""; }
 }
 
+async function getOshoQuote() {
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: "תן לי ציטוט אחד קצר ומעורר השראה של אושו (Osho). הציטוט בעברית בלבד. רק הציטוט עצמו, ללא הסבר, ללא מקור, ללא גרשיים." }] }],
+          generationConfig: { temperature: 1.0, maxOutputTokens: 200 }
+        }),
+      }
+    );
+    const data = await res.json();
+    const quote = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!quote) return "";
+    return `🕉️ <b>אושו</b>\n<i>"${quote}"</i>`;
+  } catch { return ""; }
+}
+
 async function getGmailSummary() {
   try {
     const accessToken = await getAccessToken();
@@ -367,9 +387,9 @@ export default async function handler(req, res) {
     const isTrigger = TRIGGER_WORDS.some(w => textLower.includes(w));
     if (isTrigger) {
       await sendTelegram(chatId, "⏳ רגע, אוסף מידע...");
-      const [weather, news, aiNews, calendar, gmail, quote] = await Promise.all([getWeather(), getNews(), getAINews(), getTodayEvents(), getGmailSummary(), getDailyQuote()]);
+      const [weather, news, aiNews, calendar, gmail, quote, oshoQuote] = await Promise.all([getWeather(), getNews(), getAINews(), getTodayEvents(), getGmailSummary(), getDailyQuote(), getOshoQuote()]);
       const now = new Date().toLocaleString("he-IL", { timeZone: "Asia/Jerusalem", weekday: "long", day: "numeric", month: "long" });
-      await sendTelegram(chatId, `🌅 <b>בוקר טוב אבנר!</b>\n${now}\n\n${quote}\n\n${weather}\n\n${calendar}\n\n${gmail}`);
+      await sendTelegram(chatId, `🌅 <b>בוקר טוב אבנר!</b>\n${now}\n\n${quote}\n\n${oshoQuote}\n\n${weather}\n\n${calendar}\n\n${gmail}`);
       await sendTelegram(chatId, news);
       await sendTelegram(chatId, aiNews);
     }
