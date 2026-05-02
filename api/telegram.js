@@ -479,6 +479,8 @@ export default async function handler(req, res) {
       await sendTelegram(chatId, `🌅 <b>בוקר טוב אבנר!</b>\n${now}\n\n${quote}\n\n${oshoQuote}\n\n${jokes}\n\n${weather}\n\n${calendar}\n\n${gmail}`);
       await sendTelegram(chatId, news);
       await sendTelegram(chatId, aiNews);
+    } else {
+      await sendTelegram(chatId, `❓ הנחיה לא מובנת\n\nכתוב <b>עזרה</b> לרשימת הפקודות`);
     }
 
   } catch (err) {
