@@ -10,6 +10,9 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GITHUB_REPO = "manavner/avnerman";
+const GITHUB_FILE = "api/telegram.js";
 const CHAT_ID = "1532243300";
 const TRIGGER_WORDS = ["היי", "הי", "hi", "hey", "hello", "שלום", "briefing", "סיכום"];
 
@@ -327,6 +330,64 @@ async function askOsho(question) {
   return answer;
 }
 
+// ─── Self-modify via Gemini + GitHub ─────────────────────────────────────────
+
+async function addFeature(description) {
+  // 1. Get current code from GitHub
+  const fileRes = await fetch(
+    `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE}`,
+    { headers: { Authorization: `Bearer ${GITHUB_TOKEN}`, "User-Agent": "AvnerBot" } }
+  );
+  const fileData = await fileRes.json();
+  const currentCode = Buffer.from(fileData.content, "base64").toString("utf-8");
+  const sha = fileData.sha;
+
+  // 2. Ask Gemini to add the feature
+  const gemRes = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: `אתה מפתח Node.js מומחה. הנה קוד של Telegram bot (Vercel serverless function בעברית):\n\n${currentCode}\n\n---\nהוסף את היכולת הבאה לבוט: ${description}\n\nחשוב:\n- החזר את הקוד המלא המעודכן בלבד\n- אל תוסיף markdown, backticks, או הסברים\n- שמור על כל הפונקציות הקיימות\n- הוסף את הפקודה החדשה לפונקציית עזרה\n- הקוד חייב להתחיל ב: // Telegram Webhook Handler` }]
+        }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 16384, thinkingConfig: { thinkingBudget: 0 } },
+      }),
+    }
+  );
+  const gemData = await gemRes.json();
+  let newCode = extractGeminiText(gemData);
+
+  // Clean up in case Gemini wrapped in markdown
+  newCode = newCode.replace(/^```(?:javascript|js)?\n?/i, "").replace(/\n?```$/i, "").trim();
+
+  if (!newCode || !newCode.includes("BOT_TOKEN")) throw new Error("Gemini returned invalid code");
+
+  // 3. Commit to GitHub
+  const encoded = Buffer.from(newCode).toString("base64");
+  const commitRes = await fetch(
+    `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        "Content-Type": "application/json",
+        "User-Agent": "AvnerBot",
+      },
+      body: JSON.stringify({
+        message: `feat: ${description}`,
+        content: encoded,
+        sha,
+      }),
+    }
+  );
+  if (!commitRes.ok) {
+    const err = await commitRes.json();
+    throw new Error(`GitHub commit failed: ${JSON.stringify(err)}`);
+  }
+}
+
 // ─── Main handler ────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -388,6 +449,24 @@ export default async function handler(req, res) {
       }
     }
 
+    // ── Command: add feature via Gemini ──
+    if (/^claude\s*[:\-]\s*/i.test(text)) {
+      const description = text.replace(/^claude\s*[:\-]\s*/i, "").trim();
+      if (!description) {
+        await sendTelegram(chatId, "⚙️ כתוב תיאור היכולת אחרי claude:\nדוגמה: <i>claude: הוסף פקודה שמחזירה בדיחה בספרדית</i>");
+        return res.status(200).json({ ok: true });
+      }
+      await sendTelegram(chatId, `⚙️ <b>מעבד בקשה...</b>\n\n📋 יכולת: ${escapeHtml(description)}\n\n🤖 שולח ל-Gemini לכתיבת הקוד...`);
+      try {
+        await addFeature(description);
+        await sendTelegram(chatId, `✅ <b>הקוד עודכן ב-GitHub!</b>\n\n⏳ Vercel מפרסם עכשיו (כ-30 שניות)...\n\nהיכולת תהיה זמינה בעוד רגע.`);
+      } catch (e) {
+        console.error("addFeature error:", e);
+        await sendTelegram(chatId, `❌ שגיאה: ${escapeHtml(e.message)}`);
+      }
+      return res.status(200).json({ ok: true });
+    }
+
     // ── Command: help ──
     if (textLower === "עזרה" || textLower === "help" || textLower === "?") {
       await sendTelegram(chatId,
@@ -397,6 +476,7 @@ export default async function handler(req, res) {
         `🕉️ <b>אושו - [שאלה]</b>\nתשובה מעמיקה בסגנון אושו\nדוגמה: <i>אושו - מהי אהבה?</i>\n\n` +
         `😄 <b>בדיחה</b>\n2 בדיחות אקראיות (עברית + אנגלית)\n\n` +
         `😄 <b>בדיחה - [נושא]</b>\n2 בדיחות על נושא ספציפי\nדוגמה: <i>בדיחה - רופאים</i>\n\n` +
+        `⚙️ <b>claude - [תיאור]</b>\nהוספת יכולת חדשה לבוט אוטומטית\nדוגמה: <i>claude - הוסף פקודה שמחזירה מתכון</i>\n\n` +
         `❓ <b>עזרה / help</b>\nהצגת רשימה זו`
       );
       return res.status(200).json({ ok: true });
