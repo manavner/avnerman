@@ -220,10 +220,10 @@ async function getDailyJokes() {
       jokes.map(async j => {
         const setup = await translateToHebrew(j.setup);
         const delivery = await translateToHebrew(j.delivery);
-        return `😄 ${setup}\n🤣 ${delivery}`;
+        return `😄 ${setup}\n🤣 ${delivery}\n\n🔤 <i>${j.setup}\n${j.delivery}</i>`;
       })
     );
-    return `😂 <b>בדיחות היום</b>\n\n${translated.join("\n\n")}`;
+    return `😂 <b>בדיחות היום</b>\n\n${translated.join("\n\n───────────\n\n")}`;
   } catch { return ""; }
 }
 
@@ -427,10 +427,10 @@ export default async function handler(req, res) {
             jokes.map(async j => {
               const setup = await translateToHebrew(j.setup);
               const delivery = await translateToHebrew(j.delivery);
-              return `😄 ${setup}\n🤣 ${delivery}`;
+              return `😄 ${setup}\n🤣 ${delivery}\n\n🔤 <i>${j.setup}\n${j.delivery}</i>`;
             })
           );
-          await sendTelegram(chatId, translated.join("\n\n"));
+          await sendTelegram(chatId, translated.join("\n\n───────────\n\n"));
         }
       } catch {
         await sendTelegram(chatId, "😅 לא הצלחתי למצוא בדיחה כרגע...");
