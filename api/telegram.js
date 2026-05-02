@@ -208,6 +208,25 @@ async function getTodayEvents() {
   } catch { return "📅 <b>לוח שנה היום</b>\nלא זמין"; }
 }
 
+async function getDailyJokes() {
+  try {
+    const res = await fetch(
+      "https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,religious,political,racist,sexist,explicit&type=twopart&amount=2",
+      { headers: { "User-Agent": "Mozilla/5.0" } }
+    );
+    const data = await res.json();
+    const jokes = data.jokes || [data];
+    const translated = await Promise.all(
+      jokes.map(async j => {
+        const setup = await translateToHebrew(j.setup);
+        const delivery = await translateToHebrew(j.delivery);
+        return `😄 ${setup}\n🤣 ${delivery}`;
+      })
+    );
+    return `😂 <b>בדיחות היום</b>\n\n${translated.join("\n\n")}`;
+  } catch { return ""; }
+}
+
 async function getDailyQuote() {
   try {
     const res = await fetch("https://zenquotes.io/api/random", { headers: { "User-Agent": "Mozilla/5.0" } });
@@ -387,9 +406,9 @@ export default async function handler(req, res) {
     const isTrigger = TRIGGER_WORDS.some(w => textLower.includes(w));
     if (isTrigger) {
       await sendTelegram(chatId, "⏳ רגע, אוסף מידע...");
-      const [weather, news, aiNews, calendar, gmail, quote, oshoQuote] = await Promise.all([getWeather(), getNews(), getAINews(), getTodayEvents(), getGmailSummary(), getDailyQuote(), getOshoQuote()]);
+      const [weather, news, aiNews, calendar, gmail, quote, oshoQuote, jokes] = await Promise.all([getWeather(), getNews(), getAINews(), getTodayEvents(), getGmailSummary(), getDailyQuote(), getOshoQuote(), getDailyJokes()]);
       const now = new Date().toLocaleString("he-IL", { timeZone: "Asia/Jerusalem", weekday: "long", day: "numeric", month: "long" });
-      await sendTelegram(chatId, `🌅 <b>בוקר טוב אבנר!</b>\n${now}\n\n${quote}\n\n${oshoQuote}\n\n${weather}\n\n${calendar}\n\n${gmail}`);
+      await sendTelegram(chatId, `🌅 <b>בוקר טוב אבנר!</b>\n${now}\n\n${quote}\n\n${oshoQuote}\n\n${jokes}\n\n${weather}\n\n${calendar}\n\n${gmail}`);
       await sendTelegram(chatId, news);
       await sendTelegram(chatId, aiNews);
     }
