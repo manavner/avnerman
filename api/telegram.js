@@ -254,7 +254,6 @@ async function getOshoQuote() {
         body: JSON.stringify({
           contents: [{ parts: [{ text: "תן לי ציטוט אחד קצר ומעורר השראה של אושו (Osho). הציטוט בעברית בלבד. רק הציטוט עצמו, ללא הסבר, ללא מקור, ללא גרשיים." }] }],
           generationConfig: { temperature: 1.0, maxOutputTokens: 200 },
-          thinkingConfig: { thinkingBudget: 0 }
         }),
       }
     );
@@ -319,7 +318,6 @@ async function askOsho(question) {
         },
         contents: [{ parts: [{ text: question }] }],
         generationConfig: { temperature: 0.9, maxOutputTokens: 8192 },
-        thinkingConfig: { thinkingBudget: 0 }
       }),
     }
   );
@@ -422,7 +420,6 @@ export default async function handler(req, res) {
               body: JSON.stringify({
                 contents: [{ parts: [{ text: `ספר לי בדיחה מצחיקה בעברית על הנושא: ${topic}. פורמט: שורה ראשונה היא ההקדמה, שורה שנייה היא הפאנץ' ליין. רק הבדיחה, ללא הסברים.` }] }],
                 generationConfig: { temperature: 1.0, maxOutputTokens: 300 },
-                thinkingConfig: { thinkingBudget: 0 }
               }),
             }
           );
