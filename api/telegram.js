@@ -395,6 +395,23 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // ── Command: single joke ──
+    if (textLower.includes("בדיחה") || textLower.includes("joke")) {
+      try {
+        const res2 = await fetch(
+          "https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,religious,political,racist,sexist,explicit&type=twopart",
+          { headers: { "User-Agent": "Mozilla/5.0" } }
+        );
+        const j = await res2.json();
+        const setup = await translateToHebrew(j.setup);
+        const delivery = await translateToHebrew(j.delivery);
+        await sendTelegram(chatId, `😄 ${setup}\n\n🤣 ${delivery}`);
+      } catch {
+        await sendTelegram(chatId, "😅 לא הצלחתי למצוא בדיחה כרגע...");
+      }
+      return res.status(200).json({ ok: true });
+    }
+
     // ── Command: start meeting flow ──
     if (textLower.includes("פגישה") || textLower.includes("meeting")) {
       await askWithForceReply(chatId,
