@@ -253,7 +253,8 @@ async function getOshoQuote() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: "תן לי ציטוט אחד קצר ומעורר השראה של אושו (Osho). הציטוט בעברית בלבד. רק הציטוט עצמו, ללא הסבר, ללא מקור, ללא גרשיים." }] }],
-          generationConfig: { temperature: 1.0, maxOutputTokens: 200 }
+          generationConfig: { temperature: 1.0, maxOutputTokens: 200 },
+          thinkingConfig: { thinkingBudget: 0 }
         }),
       }
     );
@@ -312,7 +313,8 @@ async function askOsho(question) {
 השתמש בתובנות מספריו ושיחותיו. ענה תמיד בעברית, בצורה קולחת ויפה.` }]
         },
         contents: [{ parts: [{ text: question }] }],
-        generationConfig: { temperature: 0.9, maxOutputTokens: 8192 }
+        generationConfig: { temperature: 0.9, maxOutputTokens: 8192 },
+        thinkingConfig: { thinkingBudget: 0 }
       }),
     }
   );
@@ -414,13 +416,14 @@ export default async function handler(req, res) {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 contents: [{ parts: [{ text: `ספר לי בדיחה מצחיקה בעברית על הנושא: ${topic}. פורמט: שורה ראשונה היא ההקדמה, שורה שנייה היא הפאנץ' ליין. רק הבדיחה, ללא הסברים.` }] }],
-                generationConfig: { temperature: 1.0, maxOutputTokens: 300 }
+                generationConfig: { temperature: 1.0, maxOutputTokens: 300 },
+                thinkingConfig: { thinkingBudget: 0 }
               }),
             }
           );
           const gemData = await gemRes.json();
           const jokeText = escapeHtml(gemData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "");
-          await sendTelegram(chatId, `😄 <b>בדיחה על ${escapeHtml(topic)}:</b>\n\n${jokeText}`);
+          await sendLongTelegram(chatId, `😄 <b>בדיחה על ${escapeHtml(topic)}:</b>\n\n${jokeText}`);
         } else {
           // 2 random jokes via JokeAPI
           const jokeRes = await fetch(
