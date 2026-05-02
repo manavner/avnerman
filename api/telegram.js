@@ -384,8 +384,8 @@ export default async function handler(req, res) {
     }
 
     // ── Command: Osho question ──
-    if (text.startsWith("אושו:") || text.startsWith("אושו :")) {
-      const question = text.replace(/^אושו\s*:\s*/u, "").trim();
+    if (/^אושו\s*[:\-]/u.test(text)) {
+      const question = text.replace(/^אושו\s*[:\-]\s*/u, "").trim();
       if (!question) {
         await sendTelegram(chatId, "🙏 כתוב את שאלתך אחרי \"אושו:\"");
         return res.status(200).json({ ok: true });
@@ -403,7 +403,7 @@ export default async function handler(req, res) {
 
     // ── Command: jokes ──
     if (textLower.includes("בדיחה") || textLower.includes("joke")) {
-      const topic = text.match(/^בדיחה\s*:\s*(.+)/u)?.[1]?.trim() || text.match(/^joke\s*:\s*(.+)/i)?.[1]?.trim();
+      const topic = text.match(/^בדיחה\s*[:\-]\s*(.+)/u)?.[1]?.trim() || text.match(/^joke\s*[:\-]\s*(.+)/i)?.[1]?.trim();
       try {
         if (topic) {
           // Topic-specific joke via Gemini
