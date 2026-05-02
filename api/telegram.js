@@ -388,6 +388,20 @@ export default async function handler(req, res) {
       }
     }
 
+    // ── Command: help ──
+    if (textLower === "עזרה" || textLower === "help" || textLower === "?") {
+      await sendTelegram(chatId,
+        `🤖 <b>רשימת פקודות הבוט</b>\n\n` +
+        `🌅 <b>היי / hi / שלום</b>\nסקירת בוקר מלאה — ציטוטים, מזג אוויר, לוח שנה, מיילים, חדשות ישראל וחדשות AI\n\n` +
+        `📅 <b>פגישה</b>\nיצירת אירוע חדש ביומן Google בשלבים\n\n` +
+        `🕉️ <b>אושו - [שאלה]</b>\nתשובה מעמיקה בסגנון אושו\nדוגמה: <i>אושו - מהי אהבה?</i>\n\n` +
+        `😄 <b>בדיחה</b>\n2 בדיחות אקראיות (עברית + אנגלית)\n\n` +
+        `😄 <b>בדיחה - [נושא]</b>\n2 בדיחות על נושא ספציפי\nדוגמה: <i>בדיחה - רופאים</i>\n\n` +
+        `❓ <b>עזרה / help</b>\nהצגת רשימה זו`
+      );
+      return res.status(200).json({ ok: true });
+    }
+
     // ── Command: Osho question ──
     if (/^אושו\s*[:\-]/u.test(text)) {
       const question = text.replace(/^אושו\s*[:\-]\s*/u, "").trim();
