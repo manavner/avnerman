@@ -395,17 +395,43 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // ── Command: single joke ──
+    // ── Command: jokes ──
     if (textLower.includes("בדיחה") || textLower.includes("joke")) {
+      const topic = text.match(/^בדיחה\s*:\s*(.+)/u)?.[1]?.trim() || text.match(/^joke\s*:\s*(.+)/i)?.[1]?.trim();
       try {
-        const res2 = await fetch(
-          "https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,religious,political,racist,sexist,explicit&type=twopart",
-          { headers: { "User-Agent": "Mozilla/5.0" } }
-        );
-        const j = await res2.json();
-        const setup = await translateToHebrew(j.setup);
-        const delivery = await translateToHebrew(j.delivery);
-        await sendTelegram(chatId, `😄 ${setup}\n\n🤣 ${delivery}`);
+        if (topic) {
+          // Topic-specific joke via Gemini
+          const gemRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: `ספר לי בדיחה מצחיקה בעברית על הנושא: ${topic}. פורמט: שורה ראשונה היא ההקדמה, שורה שנייה היא הפאנץ' ליין. רק הבדיחה, ללא הסברים.` }] }],
+                generationConfig: { temperature: 1.0, maxOutputTokens: 300 }
+              }),
+            }
+          );
+          const gemData = await gemRes.json();
+          const jokeText = gemData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          await sendTelegram(chatId, `😄 <b>בדיחה על ${topic}:</b>\n\n${jokeText}`);
+        } else {
+          // 2 random jokes via JokeAPI
+          const jokeRes = await fetch(
+            "https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,religious,political,racist,sexist,explicit&type=twopart&amount=2",
+            { headers: { "User-Agent": "Mozilla/5.0" } }
+          );
+          const jokeData = await jokeRes.json();
+          const jokes = jokeData.jokes || [jokeData];
+          const translated = await Promise.all(
+            jokes.map(async j => {
+              const setup = await translateToHebrew(j.setup);
+              const delivery = await translateToHebrew(j.delivery);
+              return `😄 ${setup}\n🤣 ${delivery}`;
+            })
+          );
+          await sendTelegram(chatId, translated.join("\n\n"));
+        }
       } catch {
         await sendTelegram(chatId, "😅 לא הצלחתי למצוא בדיחה כרגע...");
       }
