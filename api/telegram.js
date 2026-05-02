@@ -13,6 +13,12 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const CHAT_ID = "1532243300";
 const TRIGGER_WORDS = ["היי", "הי", "hi", "hey", "hello", "שלום", "briefing", "סיכום"];
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // ─── Telegram helpers ────────────────────────────────────────────────────────
 
 async function sendTelegram(chatId, text) {
@@ -387,7 +393,7 @@ export default async function handler(req, res) {
       await sendTelegram(chatId, "🙏 רגע, מתחבר לחוכמת אושו...");
       try {
         const answer = await askOsho(question);
-        await sendLongTelegram(chatId, `🕉️ <b>אושו:</b>\n\n${answer}`);
+        await sendLongTelegram(chatId, `🕉️ <b>אושו:</b>\n\n${escapeHtml(answer)}`);
       } catch (e) {
         await sendTelegram(chatId, "❌ שגיאה בחיבור ל-Gemini");
         console.error("Osho error:", e);
@@ -413,8 +419,8 @@ export default async function handler(req, res) {
             }
           );
           const gemData = await gemRes.json();
-          const jokeText = gemData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-          await sendTelegram(chatId, `😄 <b>בדיחה על ${topic}:</b>\n\n${jokeText}`);
+          const jokeText = escapeHtml(gemData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "");
+          await sendTelegram(chatId, `😄 <b>בדיחה על ${escapeHtml(topic)}:</b>\n\n${jokeText}`);
         } else {
           // 2 random jokes via JokeAPI
           const jokeRes = await fetch(
