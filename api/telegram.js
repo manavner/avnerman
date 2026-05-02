@@ -189,6 +189,39 @@ async function getTodayEvents() {
   } catch { return "📅 <b>לוח שנה היום</b>\nלא זמין"; }
 }
 
+async function getGmailSummary() {
+  try {
+    const accessToken = await getAccessToken();
+    const query = encodeURIComponent("newer_than:1d -category:promotions -category:social -category:updates -category:forums");
+    const listRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=10`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const listData = await listRes.json();
+    if (!listData.messages || listData.messages.length === 0) {
+      return "📧 <b>דואר נכנס (24 שעות)</b>\nאין מיילים חדשים";
+    }
+    const emails = await Promise.all(
+      listData.messages.slice(0, 10).map(async (msg) => {
+        const msgRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const msgData = await msgRes.json();
+        const headers = msgData.payload?.headers || [];
+        const subject = headers.find(h => h.name === "Subject")?.value || "(ללא נושא)";
+        const from = headers.find(h => h.name === "From")?.value || "";
+        const fromName = from.replace(/<[^>]+>/, "").trim() || from;
+        return `• ${subject} <i>(${fromName})</i>`;
+      })
+    );
+    return `📧 <b>דואר נכנס (24 שעות)</b>\n${emails.join("\n")}`;
+  } catch (e) {
+    console.error("Gmail error:", e);
+    return "📧 <b>דואר נכנס</b>\nלא זמין";
+  }
+}
+
 // ─── Main handler ────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -261,9 +294,10 @@ export default async function handler(req, res) {
     const isTrigger = TRIGGER_WORDS.some(w => textLower.includes(w));
     if (isTrigger) {
       await sendTelegram(chatId, "⏳ רגע, אוסף מידע...");
-      const [weather, news, aiNews, calendar] = await Promise.all([getWeather(), getNews(), getAINews(), getTodayEvents()]);
+      const [weather, news, aiNews, calendar, gmail] = await Promise.all([getWeather(), getNews(), getAINews(), getTodayEvents(), getGmailSummary()]);
       const now = new Date().toLocaleString("he-IL", { timeZone: "Asia/Jerusalem", weekday: "long", day: "numeric", month: "long" });
-      await sendTelegram(chatId, `🌅 <b>בוקר טוב אבנר!</b>\n${now}\n\n${weather}\n\n${calendar}\n\n${news}`);
+      await sendTelegram(chatId, `🌅 <b>בוקר טוב אבנר!</b>\n${now}\n\n${weather}\n\n${calendar}\n\n${gmail}`);
+      await sendTelegram(chatId, news);
       await sendTelegram(chatId, aiNews);
     }
 
