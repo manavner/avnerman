@@ -189,6 +189,17 @@ async function getTodayEvents() {
   } catch { return "📅 <b>לוח שנה היום</b>\nלא זמין"; }
 }
 
+async function getDailyQuote() {
+  try {
+    const res = await fetch("https://zenquotes.io/api/random", { headers: { "User-Agent": "Mozilla/5.0" } });
+    const data = await res.json();
+    const quote = data[0].q;
+    const author = data[0].a;
+    const translated = await translateToHebrew(quote);
+    return `💡 <b>ציטוט יומי</b>\n<i>"${translated}"</i>\n— ${author}`;
+  } catch { return ""; }
+}
+
 async function getGmailSummary() {
   try {
     const accessToken = await getAccessToken();
@@ -294,9 +305,9 @@ export default async function handler(req, res) {
     const isTrigger = TRIGGER_WORDS.some(w => textLower.includes(w));
     if (isTrigger) {
       await sendTelegram(chatId, "⏳ רגע, אוסף מידע...");
-      const [weather, news, aiNews, calendar, gmail] = await Promise.all([getWeather(), getNews(), getAINews(), getTodayEvents(), getGmailSummary()]);
+      const [weather, news, aiNews, calendar, gmail, quote] = await Promise.all([getWeather(), getNews(), getAINews(), getTodayEvents(), getGmailSummary(), getDailyQuote()]);
       const now = new Date().toLocaleString("he-IL", { timeZone: "Asia/Jerusalem", weekday: "long", day: "numeric", month: "long" });
-      await sendTelegram(chatId, `🌅 <b>בוקר טוב אבנר!</b>\n${now}\n\n${weather}\n\n${calendar}\n\n${gmail}`);
+      await sendTelegram(chatId, `🌅 <b>בוקר טוב אבנר!</b>\n${now}\n\n${quote}\n\n${weather}\n\n${calendar}\n\n${gmail}`);
       await sendTelegram(chatId, news);
       await sendTelegram(chatId, aiNews);
     }
