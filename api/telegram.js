@@ -259,7 +259,7 @@ async function getOshoQuote() {
       }
     );
     const data = await res.json();
-    const quote = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    const quote = extractGeminiText(data);
     if (!quote) return "";
     return `🕉️ <b>אושו</b>\n<i>"${quote}"</i>`;
   } catch { return ""; }
@@ -300,6 +300,11 @@ async function getGmailSummary() {
 
 // ─── Osho / Gemini ───────────────────────────────────────────────────────────
 
+function extractGeminiText(data) {
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  return parts.filter(p => !p.thought).map(p => p.text).join("").trim();
+}
+
 async function askOsho(question) {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
@@ -319,7 +324,7 @@ async function askOsho(question) {
     }
   );
   const data = await res.json();
-  const answer = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const answer = extractGeminiText(data);
   if (!answer) throw new Error("No answer from Gemini");
   return answer;
 }
@@ -422,7 +427,7 @@ export default async function handler(req, res) {
             }
           );
           const gemData = await gemRes.json();
-          const jokeText = escapeHtml(gemData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "");
+          const jokeText = escapeHtml(extractGeminiText(gemData));
           await sendLongTelegram(chatId, `😄 <b>בדיחה על ${escapeHtml(topic)}:</b>\n\n${jokeText}`);
         } else {
           // 2 random jokes via JokeAPI
