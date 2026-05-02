@@ -2,12 +2,14 @@
 // Commands:
 //   "היי" / "hi"      → daily briefing
 //   "פגישה"           → interactive calendar event creation (multi-step)
+//   "אושו: [שאלה]"   → Osho wisdom via Gemini AI
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ICAL_URL = process.env.ICAL_URL;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const CHAT_ID = "1532243300";
 const TRIGGER_WORDS = ["היי", "הי", "hi", "hey", "hello", "שלום", "briefing", "סיכום"];
 
@@ -233,6 +235,31 @@ async function getGmailSummary() {
   }
 }
 
+// ─── Osho / Gemini ───────────────────────────────────────────────────────────
+
+async function askOsho(question) {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: `אתה מומחה בתורתו של אושו (Osho / Bhagwan Shree Rajneesh).
+ענה על שאלות מנקודת מבטו של אושו, בסגנונו — עמוק, פואטי, לעיתים פרדוקסלי, תמיד מעורר מחשבה.
+השתמש בתובנות מספריו ושיחותיו. ענה תמיד בעברית, בצורה קולחת ויפה.` }]
+        },
+        contents: [{ parts: [{ text: question }] }],
+        generationConfig: { temperature: 0.9, maxOutputTokens: 1024 }
+      }),
+    }
+  );
+  const data = await res.json();
+  const answer = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!answer) throw new Error("No answer from Gemini");
+  return answer;
+}
+
 // ─── Main handler ────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -292,6 +319,24 @@ export default async function handler(req, res) {
         }
         return res.status(200).json({ ok: true });
       }
+    }
+
+    // ── Command: Osho question ──
+    if (text.startsWith("אושו:") || text.startsWith("אושו :")) {
+      const question = text.replace(/^אושו\s*:\s*/u, "").trim();
+      if (!question) {
+        await sendTelegram(chatId, "🙏 כתוב את שאלתך אחרי \"אושו:\"");
+        return res.status(200).json({ ok: true });
+      }
+      await sendTelegram(chatId, "🙏 רגע, מתחבר לחוכמת אושו...");
+      try {
+        const answer = await askOsho(question);
+        await sendTelegram(chatId, `🕉️ <b>אושו:</b>\n\n${answer}`);
+      } catch (e) {
+        await sendTelegram(chatId, "❌ שגיאה בחיבור ל-Gemini");
+        console.error("Osho error:", e);
+      }
+      return res.status(200).json({ ok: true });
     }
 
     // ── Command: start meeting flow ──
