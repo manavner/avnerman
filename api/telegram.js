@@ -4,6 +4,7 @@
 //   "פגישה"           → interactive calendar event creation (multi-step)
 //   "אושו: [שאלה]"   → Osho wisdom via Gemini AI
 //   "מתכון: [מאכל]"  → recipe for a specific dish
+//   "גימטריה: [מילה/שם]" → calculate gematria and provide interpretation
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ICAL_URL = process.env.ICAL_URL;
@@ -331,6 +332,46 @@ async function askOsho(question) {
   return answer;
 }
 
+// ─── Gematria ────────────────────────────────────────────────────────────────
+
+const HEBREW_GEMATRIA = {
+  'א': 1, 'ב': 2, 'ג': 3, 'ד': 4, 'ה': 5, 'ו': 6, 'ז': 7, 'ח': 8, 'ט': 9,
+  'י': 10, 'כ': 20, 'ל': 30, 'מ': 40, 'נ': 50, 'ס': 60, 'ע': 70, 'פ': 80, 'צ': 90,
+  'ק': 100, 'ר': 200, 'ש': 300, 'ת': 400,
+  'ך': 20, 'ם': 40, 'ן': 50, 'ף': 80, 'ץ': 90
+};
+
+function calculateGematria(word) {
+  let sum = 0;
+  for (const char of word) {
+    sum += HEBREW_GEMATRIA[char] || 0;
+  }
+  return sum;
+}
+
+async function getGematriaInterpretation(word, value) {
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `תן פרשנות קצרה ורוחנית/מיסטית למילה/שם "${word}" שערכה הגימטרי הוא ${value}. התייחס למשמעות המספר ביהדות או בקבלה, וקשר זאת למילה. ענה בעברית בלבד. מקסימום 100 מילים.` }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 500, thinkingConfig: { thinkingBudget: 0 } },
+        }),
+      }
+    );
+    const data = await res.json();
+    const interpretation = extractGeminiText(data);
+    if (!interpretation) return "לא נמצאה פרשנות.";
+    return interpretation;
+  } catch (e) {
+    console.error("Gematria interpretation error:", e);
+    return "לא נמצאה פרשנות.";
+  }
+}
+
 // ─── Self-modify via Gemini + GitHub ─────────────────────────────────────────
 
 async function addFeature(description) {
@@ -476,6 +517,7 @@ export default async function handler(req, res) {
         `📅 <b>פגישה</b>\nיצירת אירוע חדש ביומן Google בשלבים\n\n` +
         `🕉️ <b>אושו - [שאלה]</b>\nתשובה מעמיקה בסגנון אושו\nדוגמה: <i>אושו - מהי אהבה?</i>\n\n` +
         `🍳 <b>מתכון - [מאכל]</b>\nקבל מתכון למאכל ספציפי\nדוגמה: <i>מתכון - עוגת תפוחים</i>\n\n` +
+        `🔢 <b>גימטריה - [מילה/שם]</b>\nחישוב גימטריה ופרשנות למילה או שם בעברית\nדוגמה: <i>גימטריה - אבנר</i>\n\n` +
         `😄 <b>בדיחה</b>\n2 בדיחות אקראיות (עברית + אנגלית)\n\n` +
         `😄 <b>בדיחה - [נושא]</b>\n2 בדיחות על נושא ספציפי\nדוגמה: <i>בדיחה - רופאים</i>\n\n` +
         `⚙️ <b>claude - [תיאור]</b>\nהוספת יכולת חדשה לבוט אוטומטית\nדוגמה: <i>claude - הוסף פקודה שמחזירה מתכון</i>\n\n` +
@@ -529,6 +571,33 @@ export default async function handler(req, res) {
       } catch (e) {
         await sendTelegram(chatId, "❌ שגיאה בקבלת המתכון. נסה שוב מאוחר יותר.");
         console.error("Recipe error:", e);
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Command: Gematria ──
+    if (/^גימטריה\s*[:\-]/u.test(text)) {
+      const word = text.replace(/^גימטריה\s*[:\-]\s*/u, "").trim();
+      if (!word) {
+        await sendTelegram(chatId, "🔢 כתוב מילה או שם אחרי \"גימטריה:\", לדוגמה: <i>גימטריה - שלום</i>");
+        return res.status(200).json({ ok: true });
+      }
+      await sendTelegram(chatId, `⏳ מחשב גימטריה עבור "${escapeHtml(word)}"...`);
+      try {
+        const gematriaValue = calculateGematria(word);
+        if (gematriaValue === 0) {
+          await sendTelegram(chatId, `❌ המילה "${escapeHtml(word)}" אינה מכילה אותיות עבריות לחישוב גימטריה.`);
+          return res.status(200).json({ ok: true });
+        }
+        const interpretation = await getGematriaInterpretation(word, gematriaValue);
+        await sendLongTelegram(chatId,
+          `🔢 <b>גימטריה עבור "${escapeHtml(word)}"</b>\n\n` +
+          `הערך הגימטרי הוא: <b>${gematriaValue}</b>\n\n` +
+          `<b>פרשנות:</b>\n${escapeHtml(interpretation)}`
+        );
+      } catch (e) {
+        await sendTelegram(chatId, "❌ שגיאה בחישוב גימטריה או בקבלת פרשנות.");
+        console.error("Gematria error:", e);
       }
       return res.status(200).json({ ok: true });
     }
