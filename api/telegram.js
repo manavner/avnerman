@@ -23,6 +23,23 @@ async function sendTelegram(chatId, text) {
   });
 }
 
+async function sendLongTelegram(chatId, text) {
+  const MAX = 4000;
+  if (text.length <= MAX) { await sendTelegram(chatId, text); return; }
+  // Split on paragraph breaks where possible
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > MAX) {
+    let cut = remaining.lastIndexOf("\n\n", MAX);
+    if (cut < 1000) cut = remaining.lastIndexOf("\n", MAX);
+    if (cut < 1000) cut = MAX;
+    chunks.push(remaining.slice(0, cut));
+    remaining = remaining.slice(cut).trimStart();
+  }
+  if (remaining) chunks.push(remaining);
+  for (const chunk of chunks) await sendTelegram(chatId, chunk);
+}
+
 async function askWithForceReply(chatId, text) {
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: "POST",
@@ -250,7 +267,7 @@ async function askOsho(question) {
 השתמש בתובנות מספריו ושיחותיו. ענה תמיד בעברית, בצורה קולחת ויפה.` }]
         },
         contents: [{ parts: [{ text: question }] }],
-        generationConfig: { temperature: 0.9, maxOutputTokens: 1024 }
+        generationConfig: { temperature: 0.9, maxOutputTokens: 8192 }
       }),
     }
   );
@@ -331,7 +348,7 @@ export default async function handler(req, res) {
       await sendTelegram(chatId, "🙏 רגע, מתחבר לחוכמת אושו...");
       try {
         const answer = await askOsho(question);
-        await sendTelegram(chatId, `🕉️ <b>אושו:</b>\n\n${answer}`);
+        await sendLongTelegram(chatId, `🕉️ <b>אושו:</b>\n\n${answer}`);
       } catch (e) {
         await sendTelegram(chatId, "❌ שגיאה בחיבור ל-Gemini");
         console.error("Osho error:", e);
