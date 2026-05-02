@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/telegram.js": {
+      "maxDuration": 60
+    },
+    "api/oauth-callback.js": {
+      "maxDuration": 30
+    }
+  }
+}
