@@ -134,7 +134,7 @@ async function getNews() {
   try {
     const res = await fetch("https://www.ynet.co.il/Integration/StoryRss2.xml", { headers: { "User-Agent": "Mozilla/5.0" } });
     const xml = await res.text();
-    const titles = [...xml.matchAll(/<title><!\[CDATA\[(.+?)\]\]><\/title>/g)].slice(1, 5).map(m => `• ${m[1]}`);
+    const titles = [...xml.matchAll(/<title><!\[CDATA\[(.+?)\]\]><\/title>/g)].slice(1, 11).map(m => `• ${m[1]}`);
     return `📰 <b>חדשות ישראל</b>\n${titles.join("\n")}`;
   } catch { return "📰 <b>חדשות ישראל</b>\nלא זמין"; }
 }
@@ -155,7 +155,7 @@ async function getAINews() {
     const cdataTitles = [...xml.matchAll(/<title><!\[CDATA\[(.+?)\]\]><\/title>/g)].map(m => m[1]);
     const plainTitles = [...xml.matchAll(/<title>([^<]{10,})<\/title>/g)].map(m => m[1]);
     const raw = (cdataTitles.length > 0 ? cdataTitles : plainTitles)
-      .filter(t => !t.includes("TechCrunch")).slice(0, 3)
+      .filter(t => !t.includes("TechCrunch")).slice(0, 10)
       .map(t => t.replace(/&amp;/g, "&").replace(/&#8217;/g, "'").replace(/&#8220;/g, '"').replace(/&#8221;/g, '"'));
     const translated = await Promise.all(raw.map(translateToHebrew));
     return `🤖 <b>חדשות AI בעולם</b>\n${translated.map(t => `• ${t}`).join("\n")}`;
