@@ -5,6 +5,7 @@
 //   "אושו: [שאלה]"   → Osho wisdom via Gemini AI
 //   "מתכון: [מאכל]"  → recipe for a specific dish
 //   "גימטריה: [מילה/שם]" → calculate gematria and provide interpretation
+//   "שבוע"            → upcoming 7 days calendar events
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ICAL_URL = process.env.ICAL_URL;
@@ -219,6 +220,83 @@ async function getTodayEvents() {
   } catch { return "📅 <b>לוח שנה היום</b>\nלא זמין"; }
 }
 
+async function getUpcomingWeekEvents() {
+  try {
+    const res = await fetch(ICAL_URL);
+    const ical = await res.text();
+    const israelOffset = 3 * 60; // UTC+3 for Israel
+    const now = new Date(Date.now() + israelOffset * 60000);
+    now.setHours(0, 0, 0, 0); // Start of today
+
+    const sevenDaysLater = new Date(now);
+    sevenDaysLater.setDate(now.getDate() + 7);
+
+    const eventsByDay = {};
+
+    for (const block of ical.split("BEGIN:VEVENT").slice(1)) {
+      const get = name => { const m = block.match(new RegExp(`${name}[^:]*:(.+)`)); return m ? m[1].trim() : null; };
+      const summary = get("SUMMARY");
+      const dtstart = get("DTSTART");
+      if (!summary || !dtstart) continue;
+
+      let eventDate;
+      let timeStr = "";
+
+      if (dtstart.includes("T")) {
+        // Date-time event
+        const year = parseInt(dtstart.substring(0, 4));
+        const month = parseInt(dtstart.substring(4, 6)) - 1;
+        const day = parseInt(dtstart.substring(6, 8));
+        const hour = parseInt(dtstart.substring(9, 11));
+        const minute = parseInt(dtstart.substring(11, 13));
+
+        eventDate = new Date(year, month, day, hour, minute);
+        eventDate = new Date(eventDate.getTime() + israelOffset * 60000); // Adjust to Israel time
+
+        const displayHour = String(eventDate.getHours()).padStart(2, "0");
+        const displayMinute = String(eventDate.getMinutes()).padStart(2, "0");
+        timeStr = ` 🕐 ${displayHour}:${displayMinute}`;
+      } else {
+        // All-day event
+        const year = parseInt(dtstart.substring(0, 4));
+        const month = parseInt(dtstart.substring(4, 6)) - 1;
+        const day = parseInt(dtstart.substring(6, 8));
+        eventDate = new Date(year, month, day);
+        eventDate = new Date(eventDate.getTime() + israelOffset * 60000); // Adjust to Israel time
+        eventDate.setHours(0, 0, 0, 0); // Normalize for comparison
+      }
+
+      // Check if event is within the next 7 days (inclusive of today)
+      if (eventDate >= now && eventDate < sevenDaysLater) {
+        const dateKey = eventDate.toISOString().slice(0, 10);
+        if (!eventsByDay[dateKey]) {
+          eventsByDay[dateKey] = [];
+        }
+        eventsByDay[dateKey].push(`• ${summary}${timeStr}`);
+      }
+    }
+
+    let result = "📅 <b>אירועים לשבוע הקרוב</b>\n\n";
+    const sortedDates = Object.keys(eventsByDay).sort();
+
+    if (sortedDates.length === 0) {
+      return "📅 <b>אירועים לשבוע הקרוב</b>\nאין אירועים מתוכננים לשבוע הקרוב.";
+    }
+
+    for (const dateKey of sortedDates) {
+      const date = new Date(dateKey);
+      const options = { weekday: "long", day: "numeric", month: "long" };
+      const formattedDate = date.toLocaleString("he-IL", options);
+      result += `<b>${formattedDate}:</b>\n${eventsByDay[dateKey].join("\n")}\n\n`;
+    }
+    return result.trim();
+  } catch (e) {
+    console.error("getUpcomingWeekEvents error:", e);
+    return "📅 <b>אירועים לשבוע הקרוב</b>\nלא זמין";
+  }
+}
+
+
 async function getDailyJokes() {
   try {
     const res = await fetch(
@@ -284,7 +362,7 @@ async function getGmailSummary() {
     const emails = await Promise.all(
       listData.messages.slice(0, 10).map(async (msg) => {
         const msgRes = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+          `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
         const msgData = await msgRes.json();
@@ -515,6 +593,7 @@ export default async function handler(req, res) {
         `🤖 <b>רשימת פקודות הבוט</b>\n\n` +
         `🌅 <b>היי / hi / שלום</b>\nסקירת בוקר מלאה — ציטוטים, מזג אוויר, לוח שנה, מיילים, חדשות ישראל וחדשות AI\n\n` +
         `📅 <b>פגישה</b>\nיצירת אירוע חדש ביומן Google בשלבים\n\n` +
+        `🗓️ <b>שבוע</b>\nהצגת כל הפגישות לשבעת הימים הקרובים\n\n` +
         `🕉️ <b>אושו - [שאלה]</b>\nתשובה מעמיקה בסגנון אושו\nדוגמה: <i>אושו - מהי אהבה?</i>\n\n` +
         `🍳 <b>מתכון - [מאכל]</b>\nקבל מתכון למאכל ספציפי\nדוגמה: <i>מתכון - עוגת תפוחים</i>\n\n` +
         `🔢 <b>גימטריה - [מילה/שם]</b>\nחישוב גימטריה ופרשנות למילה או שם בעברית\nדוגמה: <i>גימטריה - אבנר</i>\n\n` +
@@ -649,6 +728,14 @@ export default async function handler(req, res) {
     if (textLower.includes("פגישה") || textLower.includes("meeting")) {
       await askWithForceReply(chatId,
         `📅 <b>מה התאריך?</b>\n(פורמט: DD/MM, למשל 15/05)\n${encodeState({})}`);
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Command: upcoming week events ──
+    if (textLower === "שבוע") {
+      await sendTelegram(chatId, "⏳ אוסף את הפגישות לשבוע הקרוב...");
+      const weekEvents = await getUpcomingWeekEvents();
+      await sendLongTelegram(chatId, weekEvents);
       return res.status(200).json({ ok: true });
     }
 
