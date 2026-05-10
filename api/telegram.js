@@ -7,6 +7,7 @@
 //   "גימטריה: [מילה/שם]" → calculate gematria and provide interpretation
 //   "שבוע"            → upcoming 7 days calendar events
 //   "חדשות: [נושא]"  → detailed news on a specific topic from multiple sources
+//   "היי בלי בדיחות"  → daily briefing without jokes
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ICAL_URL = process.env.ICAL_URL;
@@ -618,6 +619,7 @@ export default async function handler(req, res) {
       await sendTelegram(chatId,
         `🤖 <b>רשימת פקודות הבוט</b>\n\n` +
         `🌅 <b>היי / hi / שלום</b>\nסקירת בוקר מלאה — ציטוטים, מזג אוויר, לוח שנה, מיילים, חדשות ישראל וחדשות AI\n\n` +
+        `🌅 <b>היי בלי בדיחות</b>\nסקירת בוקר מלאה ללא בדיחות\n\n` +
         `📅 <b>פגישה</b>\nיצירת אירוע חדש ביומן Google בשלבים\n\n` +
         `🗓️ <b>שבוע</b>\nהצגת כל הפגישות לשבעת הימים הקרובים\n\n` +
         `🕉️ <b>אושו - [שאלה]</b>\nתשובה מעמיקה בסגנון אושו\nדוגמה: <i>אושו - מהי אהבה?</i>\n\n` +
@@ -786,11 +788,29 @@ export default async function handler(req, res) {
 
     // ── Command: daily briefing ──
     const isTrigger = TRIGGER_WORDS.some(w => textLower.includes(w));
+    const skipJokes = textLower.includes("בלי בדיחות");
+
     if (isTrigger) {
       await sendTelegram(chatId, "⏳ רגע, אוסף מידע...");
-      const [weather, news, aiNews, calendar, gmail, quote, oshoQuote, jokes] = await Promise.all([getWeather(), getNews(), getAINews(), getTodayEvents(), getGmailSummary(), getDailyQuote(), getOshoQuote(), getDailyJokes()]);
+      const [weather, news, aiNews, calendar, gmail, quote, oshoQuote, jokes] = await Promise.all([
+        getWeather(),
+        getNews(),
+        getAINews(),
+        getTodayEvents(),
+        getGmailSummary(),
+        getDailyQuote(),
+        getOshoQuote(),
+        skipJokes ? Promise.resolve("") : getDailyJokes() // Conditionally fetch jokes
+      ]);
       const now = new Date().toLocaleString("he-IL", { timeZone: "Asia/Jerusalem", weekday: "long", day: "numeric", month: "long" });
-      await sendTelegram(chatId, `🌅 <b>בוקר טוב אבנר!</b>\n${now}\n\n${quote}\n\n${oshoQuote}\n\n${jokes}\n\n${weather}\n\n${calendar}\n\n${gmail}`);
+      
+      let briefingText = `🌅 <b>בוקר טוב אבנר!</b>\n${now}\n\n${quote}\n\n${oshoQuote}`;
+      if (jokes) {
+        briefingText += `\n\n${jokes}`;
+      }
+      briefingText += `\n\n${weather}\n\n${calendar}\n\n${gmail}`;
+
+      await sendTelegram(chatId, briefingText);
       await sendTelegram(chatId, news);
       await sendTelegram(chatId, aiNews);
     } else {
