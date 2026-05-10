@@ -8,6 +8,8 @@
 //   "שבוע"            → upcoming 7 days calendar events
 //   "חדשות: [נושא]"  → detailed news on a specific topic from multiple sources
 //   "היי בלי בדיחות"  → daily briefing without jokes
+//   "חדשות ישראל"     → detailed news from Israel
+//   "חדשות מזג אויר"  → detailed weather forecast
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ICAL_URL = process.env.ICAL_URL;
@@ -163,6 +165,39 @@ async function getWeather() {
   } catch { return "🌤️ <b>מזג אוויר כרמיאל</b>\nלא זמין"; }
 }
 
+async function getDetailedWeather() {
+  try {
+    const res = await fetch("https://wttr.in/Karmiel?format=j1&lang=he");
+    const data = await res.json();
+    const c = data.current_condition[0];
+    const forecast = data.weather;
+
+    let detailedReport = `🌤️ <b>מזג אוויר מפורט בכרמיאל</b>\n\n`;
+    detailedReport += `<b>כעת:</b>\n`;
+    detailedReport += `טמפרטורה: ${c.temp_C}°C (מרגיש כמו ${c.FeelsLikeC}°C)\n`;
+    detailedReport += `תיאור: ${c.weatherDesc[0].value}\n`;
+    detailedReport += `לחות: ${c.humidity}%\n`;
+    detailedReport += `מהירות רוח: ${c.windspeedKmph} קמ"ש (${c.winddir16Point})\n`;
+    detailedReport += `לחץ אטמוספרי: ${c.pressure} מ"ב\n\n`;
+
+    detailedReport += `<b>תחזית ל-3 ימים הקרובים:</b>\n`;
+    for (let i = 0; i < Math.min(forecast.length, 3); i++) {
+      const day = forecast[i];
+      const date = new Date(day.date);
+      const options = { weekday: 'long', day: 'numeric', month: 'long' };
+      const formattedDate = date.toLocaleString('he-IL', options);
+      detailedReport += `\n<b>${formattedDate}:</b>\n`;
+      detailedReport += `טמפרטורה: ${day.mintempC}°C - ${day.maxtempC}°C\n`;
+      detailedReport += `תיאור: ${day.hourly[0].weatherDesc[0].value}\n`;
+      detailedReport += `סיכוי לגשם: ${day.hourly[0].chanceofrain}%\n`;
+    }
+    return detailedReport;
+  } catch (e) {
+    console.error("getDetailedWeather error:", e);
+    return "🌤️ <b>מזג אוויר מפורט בכרמיאל</b>\nלא זמין";
+  }
+}
+
 async function getNews() {
   try {
     const res = await fetch("https://www.ynet.co.il/Integration/StoryRss2.xml", { headers: { "User-Agent": "Mozilla/5.0" } });
@@ -171,6 +206,30 @@ async function getNews() {
     return `📰 <b>חדשות ישראל</b>\n${titles.join("\n")}`;
   } catch { return "📰 <b>חדשות ישראל</b>\nלא זמין"; }
 }
+
+async function getDetailedIsraelNews() {
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `סכם לי בהרחבה את החדשות האחרונות והעיקריות מישראל מכמה מקורות אמינים. הצג את המידע בצורה מסודרת עם כותרות קצרות ופסקאות. ענה בעברית בלבד.` }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 2000, thinkingConfig: { thinkingBudget: 0 } },
+        }),
+      }
+    );
+    const data = await res.json();
+    const newsSummary = extractGeminiText(data);
+    if (!newsSummary) return "לא נמצאו חדשות מפורטות מישראל.";
+    return `📰 <b>חדשות ישראל מפורטות</b>\n\n${newsSummary}`;
+  } catch (e) {
+    console.error("getDetailedIsraelNews error:", e);
+    return "אירעה שגיאה בקבלת חדשות ישראל מפורטות. נסה שוב מאוחר יותר.";
+  }
+}
+
 
 async function translateToHebrew(text) {
   try {
@@ -626,6 +685,8 @@ export default async function handler(req, res) {
         `🍳 <b>מתכון - [מאכל]</b>\nקבל מתכון למאכל ספציפי\nדוגמה: <i>מתכון - עוגת תפוחים</i>\n\n` +
         `🔢 <b>גימטריה - [מילה/שם]</b>\nחישוב גימטריה ופרשנות למילה או שם בעברית\nדוגמה: <i>גימטריה - אבנר</i>\n\n` +
         `📰 <b>חדשות - [נושא]</b>\nקבל חדשות מפורטות על נושא ספציפי מכמה מקורות\nדוגמה: <i>חדשות - כלכלה</i>\n\n` +
+        `📰 <b>חדשות ישראל</b>\nקבל חדשות מפורטות ומרחבות מישראל\n\n` +
+        `🌤️ <b>חדשות מזג אויר</b>\nקבל תחזית מזג אוויר מפורטת לכרמיאל\n\n` +
         `😄 <b>בדיחה</b>\n2 בדיחות אקראיות (עברית + אנגלית)\n\n` +
         `😄 <b>בדיחה - [נושא]</b>\n2 בדיחות על נושא ספציפי\nדוגמה: <i>בדיחה - רופאים</i>\n\n` +
         `⚙️ <b>claude - [תיאור]</b>\nהוספת יכולת חדשה לבוט אוטומטית\nדוגמה: <i>claude - הוסף פקודה שמחזירה מתכון</i>\n\n` +
@@ -724,6 +785,32 @@ export default async function handler(req, res) {
       } catch (e) {
         await sendTelegram(chatId, "❌ שגיאה בקבלת חדשות בנושא זה. נסה שוב מאוחר יותר.");
         console.error("News on topic error:", e);
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Command: Detailed Israel News ──
+    if (textLower === "חדשות ישראל") {
+      await sendTelegram(chatId, "⏳ אוסף חדשות מפורטות מישראל...");
+      try {
+        const detailedNews = await getDetailedIsraelNews();
+        await sendLongTelegram(chatId, detailedNews);
+      } catch (e) {
+        await sendTelegram(chatId, "❌ שגיאה בקבלת חדשות ישראל מפורטות. נסה שוב מאוחר יותר.");
+        console.error("Detailed Israel News error:", e);
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Command: Detailed Weather News ──
+    if (textLower === "חדשות מזג אויר") {
+      await sendTelegram(chatId, "⏳ אוסף תחזית מזג אוויר מפורטת...");
+      try {
+        const detailedWeather = await getDetailedWeather();
+        await sendLongTelegram(chatId, detailedWeather);
+      } catch (e) {
+        await sendTelegram(chatId, "❌ שגיאה בקבלת תחזית מזג האוויר המפורטת. נסה שוב מאוחר יותר.");
+        console.error("Detailed Weather News error:", e);
       }
       return res.status(200).json({ ok: true });
     }
