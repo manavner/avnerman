@@ -6,6 +6,7 @@
 //   "מתכון: [מאכל]"  → recipe for a specific dish
 //   "גימטריה: [מילה/שם]" → calculate gematria and provide interpretation
 //   "שבוע"            → upcoming 7 days calendar events
+//   "חדשות: [נושא]"  → detailed news on a specific topic from multiple sources
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ICAL_URL = process.env.ICAL_URL;
@@ -508,6 +509,31 @@ async function addFeature(description) {
   }
 }
 
+// ─── News Topic ──────────────────────────────────────────────────────────────
+
+async function getNewsOnTopic(topic) {
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `סכם לי בהרחבה את החדשות האחרונות בנושא "${topic}" מכמה מקורות אמינים. הצג את המידע בצורה מסודרת עם כותרות קצרות ופסקאות. ענה בעברית בלבד.` }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 2000, thinkingConfig: { thinkingBudget: 0 } },
+        }),
+      }
+    );
+    const data = await res.json();
+    const newsSummary = extractGeminiText(data);
+    if (!newsSummary) return "לא נמצאו חדשות בנושא זה.";
+    return newsSummary;
+  } catch (e) {
+    console.error("getNewsOnTopic error:", e);
+    return "אירעה שגיאה בקבלת החדשות. נסה שוב מאוחר יותר.";
+  }
+}
+
 // ─── Main handler ────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -597,6 +623,7 @@ export default async function handler(req, res) {
         `🕉️ <b>אושו - [שאלה]</b>\nתשובה מעמיקה בסגנון אושו\nדוגמה: <i>אושו - מהי אהבה?</i>\n\n` +
         `🍳 <b>מתכון - [מאכל]</b>\nקבל מתכון למאכל ספציפי\nדוגמה: <i>מתכון - עוגת תפוחים</i>\n\n` +
         `🔢 <b>גימטריה - [מילה/שם]</b>\nחישוב גימטריה ופרשנות למילה או שם בעברית\nדוגמה: <i>גימטריה - אבנר</i>\n\n` +
+        `📰 <b>חדשות - [נושא]</b>\nקבל חדשות מפורטות על נושא ספציפי מכמה מקורות\nדוגמה: <i>חדשות - כלכלה</i>\n\n` +
         `😄 <b>בדיחה</b>\n2 בדיחות אקראיות (עברית + אנגלית)\n\n` +
         `😄 <b>בדיחה - [נושא]</b>\n2 בדיחות על נושא ספציפי\nדוגמה: <i>בדיחה - רופאים</i>\n\n` +
         `⚙️ <b>claude - [תיאור]</b>\nהוספת יכולת חדשה לבוט אוטומטית\nדוגמה: <i>claude - הוסף פקודה שמחזירה מתכון</i>\n\n` +
@@ -677,6 +704,24 @@ export default async function handler(req, res) {
       } catch (e) {
         await sendTelegram(chatId, "❌ שגיאה בחישוב גימטריה או בקבלת פרשנות.");
         console.error("Gematria error:", e);
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Command: News on Topic ──
+    if (/^חדשות\s*[:\-]/u.test(text)) {
+      const topic = text.replace(/^חדשות\s*[:\-]\s*/u, "").trim();
+      if (!topic) {
+        await sendTelegram(chatId, "📰 כתוב את הנושא שמעניין אותך אחרי \"חדשות:\", לדוגמה: <i>חדשות - טכנולוגיה</i>");
+        return res.status(200).json({ ok: true });
+      }
+      await sendTelegram(chatId, `⏳ אוסף חדשות בנושא "${escapeHtml(topic)}"...`);
+      try {
+        const news = await getNewsOnTopic(topic);
+        await sendLongTelegram(chatId, `📰 <b>חדשות בנושא "${escapeHtml(topic)}":</b>\n\n${escapeHtml(news)}`);
+      } catch (e) {
+        await sendTelegram(chatId, "❌ שגיאה בקבלת חדשות בנושא זה. נסה שוב מאוחר יותר.");
+        console.error("News on topic error:", e);
       }
       return res.status(200).json({ ok: true });
     }
