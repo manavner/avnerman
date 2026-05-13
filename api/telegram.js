@@ -31,17 +31,21 @@ function escapeHtml(text) {
 
 // ─── Telegram helpers ────────────────────────────────────────────────────────
 
-async function sendTelegram(chatId, text) {
+async function sendTelegram(chatId, text, reply_markup = null) {
+  const body = { chat_id: chatId, text, parse_mode: "HTML" };
+  if (reply_markup) {
+    body.reply_markup = reply_markup;
+  }
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+    body: JSON.stringify(body),
   });
 }
 
-async function sendLongTelegram(chatId, text) {
+async function sendLongTelegram(chatId, text, reply_markup = null) {
   const MAX = 4000;
-  if (text.length <= MAX) { await sendTelegram(chatId, text); return; }
+  if (text.length <= MAX) { await sendTelegram(chatId, text, reply_markup); return; }
   // Split on paragraph breaks where possible
   const chunks = [];
   let remaining = text;
@@ -53,7 +57,7 @@ async function sendLongTelegram(chatId, text) {
     remaining = remaining.slice(cut).trimStart();
   }
   if (remaining) chunks.push(remaining);
-  for (const chunk of chunks) await sendTelegram(chatId, chunk);
+  for (const chunk of chunks) await sendTelegram(chatId, chunk, reply_markup);
 }
 
 async function askWithForceReply(chatId, text) {
@@ -601,14 +605,30 @@ export default async function handler(req, res) {
 
   try {
     const message = req.body?.message;
-    if (!message) return res.status(200).json({ ok: true });
+    const callbackQuery = req.body?.callback_query;
 
-    const chatId = message.chat?.id?.toString();
-    if (chatId !== CHAT_ID) return res.status(200).json({ ok: true });
+    if (!message && !callbackQuery) return res.status(200).json({ ok: true });
 
-    const text = (message.text || "").trim();
-    const textLower = text.toLowerCase();
-    const replyTo = message.reply_to_message?.text || "";
+    let chatId, text, textLower, replyTo;
+
+    if (message) {
+      chatId = message.chat?.id?.toString();
+      if (chatId !== CHAT_ID) return res.status(200).json({ ok: true });
+      text = (message.text || "").trim();
+      textLower = text.toLowerCase();
+      replyTo = message.reply_to_message?.text || "";
+    } else if (callbackQuery) {
+      chatId = callbackQuery.message.chat.id.toString();
+      if (chatId !== CHAT_ID) return res.status(200).json({ ok: true });
+      text = callbackQuery.data; // Callback data will be the news title
+      textLower = text.toLowerCase();
+      replyTo = ""; // No reply_to_message for callback queries
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callback_query_id: callbackQuery.id }),
+      });
+    }
 
     // ── Step: handle reply in multi-step flow ──
     const step = getStep(replyTo);
@@ -686,6 +706,7 @@ export default async function handler(req, res) {
         `🔢 <b>גימטריה - [מילה/שם]</b>\nחישוב גימטריה ופרשנות למילה או שם בעברית\nדוגמה: <i>גימטריה - אבנר</i>\n\n` +
         `📰 <b>חדשות - [נושא]</b>\nקבל חדשות מפורטות על נושא ספציפי מכמה מקורות\nדוגמה: <i>חדשות - כלכלה</i>\n\n` +
         `📰 <b>חדשות ישראל</b>\nקבל חדשות מפורטות ומרחבות מישראל\n\n` +
+        `📰 <b>הרחב חדשות - [כותרת]</b>\nקבל הרחבה על כותרת חדשותית ספציפית\nדוגמה: <i>הרחב חדשות - מחירי הדיור עולים</i>\n\n` +
         `🌤️ <b>חדשות מזג אויר</b>\nקבל תחזית מזג אוויר מפורטת לכרמיאל\n\n` +
         `😄 <b>בדיחה</b>\n2 בדיחות אקראיות (עברית + אנגלית)\n\n` +
         `😄 <b>בדיחה - [נושא]</b>\n2 בדיחות על נושא ספציפי\nדוגמה: <i>בדיחה - רופאים</i>\n\n` +
@@ -785,6 +806,44 @@ export default async function handler(req, res) {
       } catch (e) {
         await sendTelegram(chatId, "❌ שגיאה בקבלת חדשות בנושא זה. נסה שוב מאוחר יותר.");
         console.error("News on topic error:", e);
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Command: Expand News ──
+    if (textLower.startsWith("הרחב חדשות -") || callbackQuery?.data?.startsWith("expand_news_")) {
+      let newsTitle;
+      if (message) {
+        newsTitle = text.replace(/^הרחב חדשות\s*-\s*/u, "").trim();
+      } else if (callbackQuery) {
+        newsTitle = callbackQuery.data.replace("expand_news_", "").trim();
+      }
+
+      if (!newsTitle) {
+        await sendTelegram(chatId, "📰 אנא ספק כותרת חדשותית להרחבה, לדוגמה: <i>הרחב חדשות - מחירי הדיור עולים</i>");
+        return res.status(200).json({ ok: true });
+      }
+
+      await sendTelegram(chatId, `⏳ מרחיב את הדיווח על "${escapeHtml(newsTitle)}"...`);
+      try {
+        const gemRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `הרחב בפירוט את כותרת החדשות הבאה: "${newsTitle}". ספק מידע נוסף, רקע, והשלכות אפשריות. ענה בעברית בלבד, בפורמט קריא עם פסקאות.` }] }],
+              generationConfig: { temperature: 0.7, maxOutputTokens: 2000, thinkingConfig: { thinkingBudget: 0 } },
+            }),
+          }
+        );
+        const gemData = await gemRes.json();
+        const expandedNews = extractGeminiText(gemData);
+        if (!expandedNews) throw new Error("No expanded news from Gemini");
+        await sendLongTelegram(chatId, `📰 <b>הרחבה על "${escapeHtml(newsTitle)}":</b>\n\n${escapeHtml(expandedNews)}`);
+      } catch (e) {
+        await sendTelegram(chatId, "❌ שגיאה בקבלת הרחבת החדשות. נסה שוב מאוחר יותר.");
+        console.error("Expand News error:", e);
       }
       return res.status(200).json({ ok: true });
     }
@@ -897,10 +956,16 @@ export default async function handler(req, res) {
       }
       briefingText += `\n\n${weather}\n\n${calendar}\n\n${gmail}`;
 
+      // Add inline keyboard for news expansion
+      const newsTitles = news.split('\n').slice(1).map(line => line.replace('• ', '').trim());
+      const inlineKeyboard = {
+        inline_keyboard: newsTitles.map(title => [{ text: `הרחב: ${title}`, callback_data: `expand_news_${title}` }])
+      };
+
       await sendTelegram(chatId, briefingText);
-      await sendTelegram(chatId, news);
+      await sendTelegram(chatId, news, inlineKeyboard);
       await sendTelegram(chatId, aiNews);
-    } else {
+    } else if (message) { // Only send "unrecognized command" if it's a direct message, not a callback
       await sendTelegram(chatId, `❓ הנחיה לא מובנת\n\nכתוב <b>עזרה</b> לרשימת הפקודות`);
     }
 
