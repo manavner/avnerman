@@ -12,6 +12,7 @@
 //   "חדשות מזג אויר" → detailed weather forecast
 //   "חדשות"           → top 10 news headlines from Ynet
 //   "חדשות מורחבות: [נושא]" → detailed news on a specific topic from the last day
+//   "הרחב חדשות: [כותרת]" → get more details on a specific news headline
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ICAL_URL = process.env.ICAL_URL;
@@ -713,7 +714,7 @@ export default async function handler(req, res) {
         `🕉️ <b>אושו - [שאלה]</b>\nתשובה מעמיקה בסגנון אושו\nדוגמה: <i>אושו - מהי אהבה?</i>\n\n` +
         `🍳 <b>מתכון - [מאכל]</b>\nקבל מתכון למאכל ספציפי\nדוגמה: <i>מתכון - עוגת תפוחים</i>\n\n` +
         `🔢 <b>גימטריה - [מילה/שם]</b>\nחישוב גימטריה ופרשנות למילה או שם בעברית\nדוגמה: <i>גימטריה - אבנר</i>\n\n` +
-        `📰 <b>חדשות</b>\n10 כותרות חדשותיות אחרונות מ-Ynet\n\n` +
+        `📰 <b>חדשות</b>\n10 כותרות חדשותיות אחרונות מ-Ynet, עם אפשרות להרחבה\n\n` +
         `📰 <b>חדשות - [נושא]</b>\nקבל חדשות מפורטות על נושא ספציפי מכמה מקורות\nדוגמה: <i>חדשות - כלכלה</i>\n\n` +
         `📰 <b>חדשות מורחבות - [נושא]</b>\nקבל חדשות מורחבות מהיום האחרון על נושא ספציפי\nדוגמה: <i>חדשות מורחבות - טכנולוגיה</i>\n\n` +
         `📰 <b>חדשות ישראל</b>\nקבל חדשות מפורטות ומרחבות מישראל\n\n` +
