@@ -9,8 +9,9 @@
 //   "חדשות: [נושא]"  → detailed news on a specific topic from multiple sources
 //   "היי בלי בדיחות"  → daily briefing without jokes
 //   "חדשות ישראל"     → detailed news from Israel
-//   "חדשות מזג אויר"  → detailed weather forecast
+//   "חדשות מזג אויר" → detailed weather forecast
 //   "חדשות"           → top 10 news headlines from Ynet
+//   "חדשות מורחבות: [נושא]" → detailed news on a specific topic from the last day
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ICAL_URL = process.env.ICAL_URL;
@@ -78,7 +79,7 @@ async function askWithForceReply(chatId, text) {
 // Format: "...question...\n〔date|time|title〕"  (hidden in last line)
 
 function encodeState(state) {
-  return `〔${state.date || ""}|${state.time || ""}|${state.title || ""}〕`;
+  return `〔${state.date || ""}|\n${state.time || ""}|${state.title || ""}〕`;
 }
 
 function decodeState(text) {
@@ -576,15 +577,22 @@ async function addFeature(description) {
 
 // ─── News Topic ──────────────────────────────────────────────────────────────
 
-async function getNewsOnTopic(topic) {
+async function getNewsOnTopic(topic, lastDay = false) {
   try {
+    let prompt;
+    if (lastDay) {
+      prompt = `סכם לי בהרחבה את החדשות המורחבות מהיום האחרון בנושא "${topic}" מכמה מקורות אמינים. הצג את המידע בצורה מסודרת עם כותרות קצרות ופסקאות. ענה בעברית בלבד.`;
+    } else {
+      prompt = `סכם לי בהרחבה את החדשות האחרונות בנושא "${topic}" מכמה מקורות אמינים. הצג את המידע בצורה מסודרת עם כותרות קצרות ופסקאות. ענה בעברית בלבד.`;
+    }
+
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: `סכם לי בהרחבה את החדשות האחרונות בנושא "${topic}" מכמה מקורות אמינים. הצג את המידע בצורה מסודרת עם כותרות קצרות ופסקאות. ענה בעברית בלבד.` }] }],
+          contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { temperature: 0.7, maxOutputTokens: 2000, thinkingConfig: { thinkingBudget: 0 } },
         }),
       }
@@ -707,6 +715,7 @@ export default async function handler(req, res) {
         `🔢 <b>גימטריה - [מילה/שם]</b>\nחישוב גימטריה ופרשנות למילה או שם בעברית\nדוגמה: <i>גימטריה - אבנר</i>\n\n` +
         `📰 <b>חדשות</b>\n10 כותרות חדשותיות אחרונות מ-Ynet\n\n` +
         `📰 <b>חדשות - [נושא]</b>\nקבל חדשות מפורטות על נושא ספציפי מכמה מקורות\nדוגמה: <i>חדשות - כלכלה</i>\n\n` +
+        `📰 <b>חדשות מורחבות - [נושא]</b>\nקבל חדשות מורחבות מהיום האחרון על נושא ספציפי\nדוגמה: <i>חדשות מורחבות - טכנולוגיה</i>\n\n` +
         `📰 <b>חדשות ישראל</b>\nקבל חדשות מפורטות ומרחבות מישראל\n\n` +
         `📰 <b>הרחב חדשות - [כותרת]</b>\nקבל הרחבה על כותרת חדשותית ספציפית\nדוגמה: <i>הרחב חדשות - מחירי הדיור עולים</i>\n\n` +
         `🌤️ <b>חדשות מזג אויר</b>\nקבל תחזית מזג אוויר מפורטת לכרמיאל\n\n` +
@@ -794,8 +803,8 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // ── Command: News on Topic ──
-    if (/^חדשות\s*[:\-]/u.test(text)) {
+    // ── Command: News on Topic (general) ──
+    if (/^חדשות\s*[:\-]/u.test(text) && !/^חדשות מורחבות\s*[:\-]/u.test(text)) {
       const topic = text.replace(/^חדשות\s*[:\-]\s*/u, "").trim();
       if (!topic) {
         // If "חדשות" without a topic, fall through to the general news command
@@ -810,6 +819,24 @@ export default async function handler(req, res) {
         }
         return res.status(200).json({ ok: true });
       }
+    }
+
+    // ── Command: Expanded News on Topic (last day) ──
+    if (/^חדשות מורחבות\s*[:\-]/u.test(text)) {
+      const topic = text.replace(/^חדשות מורחבות\s*[:\-]\s*/u, "").trim();
+      if (!topic) {
+        await sendTelegram(chatId, "📰 אנא ספק נושא עבור חדשות מורחבות, לדוגמה: <i>חדשות מורחבות - טכנולוגיה</i>");
+        return res.status(200).json({ ok: true });
+      }
+      await sendTelegram(chatId, `⏳ אוסף חדשות מורחבות מהיום האחרון בנושא "${escapeHtml(topic)}"...`);
+      try {
+        const news = await getNewsOnTopic(topic, true); // Pass true for lastDay
+        await sendLongTelegram(chatId, `📰 <b>חדשות מורחבות מהיום האחרון בנושא "${escapeHtml(topic)}":</b>\n\n${escapeHtml(news)}`);
+      } catch (e) {
+        await sendTelegram(chatId, "❌ שגיאה בקבלת חדשות מורחבות בנושא זה. נסה שוב מאוחר יותר.");
+        console.error("Expanded News on topic error:", e);
+      }
+      return res.status(200).json({ ok: true });
     }
 
     // ── Command: General News (top 10 from Ynet) ──
