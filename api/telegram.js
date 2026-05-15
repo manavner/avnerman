@@ -10,6 +10,7 @@
 //   "היי בלי בדיחות"  → daily briefing without jokes
 //   "חדשות ישראל"     → detailed news from Israel
 //   "חדשות מזג אויר"  → detailed weather forecast
+//   "חדשות"           → top 10 news headlines from Ynet
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ICAL_URL = process.env.ICAL_URL;
@@ -704,6 +705,7 @@ export default async function handler(req, res) {
         `🕉️ <b>אושו - [שאלה]</b>\nתשובה מעמיקה בסגנון אושו\nדוגמה: <i>אושו - מהי אהבה?</i>\n\n` +
         `🍳 <b>מתכון - [מאכל]</b>\nקבל מתכון למאכל ספציפי\nדוגמה: <i>מתכון - עוגת תפוחים</i>\n\n` +
         `🔢 <b>גימטריה - [מילה/שם]</b>\nחישוב גימטריה ופרשנות למילה או שם בעברית\nדוגמה: <i>גימטריה - אבנר</i>\n\n` +
+        `📰 <b>חדשות</b>\n10 כותרות חדשותיות אחרונות מ-Ynet\n\n` +
         `📰 <b>חדשות - [נושא]</b>\nקבל חדשות מפורטות על נושא ספציפי מכמה מקורות\nדוגמה: <i>חדשות - כלכלה</i>\n\n` +
         `📰 <b>חדשות ישראל</b>\nקבל חדשות מפורטות ומרחבות מישראל\n\n` +
         `📰 <b>הרחב חדשות - [כותרת]</b>\nקבל הרחבה על כותרת חדשותית ספציפית\nדוגמה: <i>הרחב חדשות - מחירי הדיור עולים</i>\n\n` +
@@ -796,16 +798,33 @@ export default async function handler(req, res) {
     if (/^חדשות\s*[:\-]/u.test(text)) {
       const topic = text.replace(/^חדשות\s*[:\-]\s*/u, "").trim();
       if (!topic) {
-        await sendTelegram(chatId, "📰 כתוב את הנושא שמעניין אותך אחרי \"חדשות:\", לדוגמה: <i>חדשות - טכנולוגיה</i>");
+        // If "חדשות" without a topic, fall through to the general news command
+      } else {
+        await sendTelegram(chatId, `⏳ אוסף חדשות בנושא "${escapeHtml(topic)}"...`);
+        try {
+          const news = await getNewsOnTopic(topic);
+          await sendLongTelegram(chatId, `📰 <b>חדשות בנושא "${escapeHtml(topic)}":</b>\n\n${escapeHtml(news)}`);
+        } catch (e) {
+          await sendTelegram(chatId, "❌ שגיאה בקבלת חדשות בנושא זה. נסה שוב מאוחר יותר.");
+          console.error("News on topic error:", e);
+        }
         return res.status(200).json({ ok: true });
       }
-      await sendTelegram(chatId, `⏳ אוסף חדשות בנושא "${escapeHtml(topic)}"...`);
+    }
+
+    // ── Command: General News (top 10 from Ynet) ──
+    if (textLower === "חדשות") {
+      await sendTelegram(chatId, "⏳ אוסף כותרות חדשותיות מ-Ynet...");
       try {
-        const news = await getNewsOnTopic(topic);
-        await sendLongTelegram(chatId, `📰 <b>חדשות בנושא "${escapeHtml(topic)}":</b>\n\n${escapeHtml(news)}`);
+        const news = await getNews();
+        const newsTitles = news.split('\n').slice(1).map(line => line.replace('• ', '').trim());
+        const inlineKeyboard = {
+          inline_keyboard: newsTitles.map(title => [{ text: `הרחב: ${title}`, callback_data: `expand_news_${title}` }])
+        };
+        await sendTelegram(chatId, news, inlineKeyboard);
       } catch (e) {
-        await sendTelegram(chatId, "❌ שגיאה בקבלת חדשות בנושא זה. נסה שוב מאוחר יותר.");
-        console.error("News on topic error:", e);
+        await sendTelegram(chatId, "❌ שגיאה בקבלת החדשות. נסה שוב מאוחר יותר.");
+        console.error("General News error:", e);
       }
       return res.status(200).json({ ok: true });
     }
