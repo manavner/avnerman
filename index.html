@@ -731,6 +731,7 @@
     <p class="hero-sub" data-i18n="hero_sub">Music · Apps · Creativity · Joy</p>
     <div class="apps-controls">
       <button class="cta-btn" onclick="showSection('projects')" data-i18n="hero_cta">Explore Projects</button>
+      <button class="cta-btn" onclick="window.open('https://philosophy.manavner.com/', '_blank')" data-i18n="hero_philosophy">Philosophy Course</button>
       <button class="cta-btn" onclick="showSection('apps')" data-i18n="hero_apps" style="background: transparent; border: 1px solid var(--accent); color: var(--accent); box-shadow: none;">Useful Apps</button>
     </div>
   </section>
@@ -793,6 +794,12 @@
         <span class="project-icon">🎵</span>
         <div class="project-name" data-i18n="proj_music_name">My Music</div>
         <p class="project-desc" data-i18n="proj_music_desc">Listen to my music on YouTube and Spotify</p>
+      </div>
+
+      <div class="project-card" data-secret-id="philosophy-course" onclick="window.open('https://philosophy.manavner.com/', '_blank')">
+        <span class="project-icon">🧠</span>
+        <div class="project-name" data-i18n="proj_philosophy_name">Philosophy Course</div>
+        <p class="project-desc" data-i18n="proj_philosophy_desc">Hebrew philosophy audio course player for morning walks</p>
       </div>
 
       <div class="project-card" data-secret-id="medianoche" onclick="window.open('https://media-noche.manavner.com/', '_blank')">
@@ -958,7 +965,7 @@
     const i18n = {
       en: {
         nav_home: "Home", nav_about: "About", nav_projects: "Projects", nav_apps: "Apps", nav_music: "Music", nav_privacy: "Privacy",
-        hero_name: "Avner Man", hero_title: "Digital Dreams", hero_sub: "Music · Apps · Creativity · Joy", hero_cta: "Explore Projects", hero_apps: "Useful Apps", hero_manage_apps: "Manage Apps",
+        hero_name: "Avner Man", hero_title: "Digital Dreams", hero_sub: "Music · Apps · Creativity · Joy", hero_cta: "Explore Projects", hero_philosophy: "Philosophy Course", hero_apps: "Useful Apps", hero_manage_apps: "Manage Apps",
         about_tagline: "A retired dreamer, music tinkerer, and joyful digital creator",
         about_p1: "Hi! I'm Avner – a happy pensioner who decided that retirement is just the beginning. Out of passion for music, creativity, and good vibes, I create music apps, small tools, fun experiments, and sometimes just follow my wildest dreams — and build them.",
         about_p2: "Not for money. Not for fame. Just for the fun. And maybe, a little bit, for a better world.",
@@ -970,6 +977,7 @@
         proj_salsaflow_name: "Salsa Flow DJ", proj_salsaflow_desc: "Salsa Flow DJ – mix and play salsa music",
         proj_yttool_name: "YouTube Playlist Tool", proj_yttool_desc: "Tool for managing and editing YouTube playlists",
         proj_music_name: "My Music", proj_music_desc: "Listen to my music on YouTube and Spotify",
+        proj_philosophy_name: "Philosophy Course", proj_philosophy_desc: "Hebrew philosophy audio course player for morning walks",
         proj_biblecode_name: "The Bible Code", proj_biblecode_desc: "Search for equidistant letter sequences in the Bible",
         proj_numerology_name: "Numerology Map", proj_numerology_desc: "Your personal numerology reading",
         apps_title: "Useful Apps", apps_sub: "My collection of tiny tools", manage_apps_title: "Manage Apps", app_name_ph: "App Name", app_url_ph: "App URL", add_app: "Add",
@@ -982,7 +990,7 @@
       },
       he: {
         nav_home: "בית", nav_about: "אודות", nav_projects: "פרויקטים", nav_apps: "אפליקציות", nav_music: "מוזיקה", nav_privacy: "פרטיות",
-        hero_name: "אבנר מן", hero_title: "חלומות דיגיטליים", hero_sub: "מוזיקה · אפליקציות · יצירה · שמחה", hero_cta: "גלה פרויקטים", hero_apps: "אפליקציות שימושיות", hero_manage_apps: "ניהול אפליקציות",
+        hero_name: "אבנר מן", hero_title: "חלומות דיגיטליים", hero_sub: "מוזיקה · אפליקציות · יצירה · שמחה", hero_cta: "גלה פרויקטים", hero_philosophy: "קורס פילוסופיה", hero_apps: "אפליקציות שימושיות", hero_manage_apps: "ניהול אפליקציות",
         about_tagline: "גמלאי חולם, מתעסק במוזיקה, ויוצר דיגיטלי שמח",
         about_p1: "היי! אני אבנר – גמלאי מאושר שהחליט שהפרישה היא רק ההתחלה. מתוך אהבה למוזיקה, יצירתיות ואווירה טובה, אני יוצר אפליקציות מוזיקה, כלים קטנים, ניסויים כיפיים, ולפעמים פשוט עוקב אחרי החלומות הכי פרועים שלי — ובונה אותם.",
         about_p2: "לא בשביל כסף. לא בשביל תהילה. רק בשביל הכיף. ואולי, קצת, בשביל עולם טוב יותר.",
@@ -994,6 +1002,7 @@
         proj_salsaflow_name: "Salsa Flow DJ", proj_salsaflow_desc: "Salsa Flow DJ – מיקס והשמעת מוזיקת סלסה",
         proj_yttool_name: "כלי לרשימות YOUTUBE", proj_yttool_desc: "כלי לניהול ועריכת רשימות השמעה ב-YouTube",
         proj_music_name: "המוזיקה שלי", proj_music_desc: "האזן למוזיקה שלי ב-YouTube וב-Spotify",
+        proj_philosophy_name: "קורס פילוסופיה", proj_philosophy_desc: "נגן קורס פילוסופיה בעברית להליכות בוקר",
         proj_biblecode_name: "הצופן התנ״כי", proj_biblecode_desc: "חיפוש דילוגי אותיות בתנ״ך",
         proj_numerology_name: "מפה נומרולוגית", proj_numerology_desc: "קריאה נומרולוגית אישית",
         apps_title: "אפליקציות שימושיות", apps_sub: "האוסף שלי לכלים קטנים", manage_apps_title: "ניהול אפליקציות", app_name_ph: "שם האפליקציה", app_url_ph: "קישור (URL)", add_app: "הוסף",
@@ -1006,7 +1015,7 @@
       },
       ru: {
         nav_home: "Главная", nav_about: "Обо мне", nav_projects: "Проекты", nav_apps: "Приложения", nav_music: "Музыка", nav_privacy: "Конфиденциальность",
-        hero_title: "Цифровые мечты", hero_sub: "Музыка · Приложения · Творчество · Радость", hero_cta: "Смотреть проекты", hero_apps: "Полезные приложения", hero_manage_apps: "Управление приложениями",
+        hero_title: "Цифровые мечты", hero_sub: "Музыка · Приложения · Творчество · Радость", hero_cta: "Смотреть проекты", hero_philosophy: "Курс философии", hero_apps: "Полезные приложения", hero_manage_apps: "Управление приложениями",
         about_tagline: "Мечтатель на пенсии, любитель музыки и радостный цифровой творец",
         about_p1: "Привет! Я Авнер — счастливый пенсионер, который решил, что выход на пенсию — это только начало. Из любви к музыке, творчеству и хорошей атмосфере я создаю музыкальные приложения, небольшие инструменты, весёлые эксперименты и иногда просто следую своим самым смелым мечтам — и воплощаю их.",
         about_p2: "Не ради денег. Не ради славы. Просто ради удовольствия. И, может быть, немного — ради лучшего мира.",
@@ -1018,6 +1027,7 @@
         proj_salsaflow_name: "Salsa Flow DJ", proj_salsaflow_desc: "Salsa Flow DJ – микс и воспроизведение музыки сальса",
         proj_yttool_name: "Инструмент YouTube плейлистов", proj_yttool_desc: "Инструмент для управления и редактирования плейлистов YouTube",
         proj_music_name: "Моя музыка", proj_music_desc: "Слушайте мою музыку на YouTube и Spotify",
+        proj_philosophy_name: "Курс философии", proj_philosophy_desc: "Плеер курса философии на иврите для утренних прогулок",
         proj_biblecode_name: "Библейский код", proj_biblecode_desc: "Поиск равноудалённых последовательностей букв в Библии",
         proj_numerology_name: "Нумерологическая карта", proj_numerology_desc: "Ваш личный нумерологический расчёт",
         apps_title: "Полезные приложения", apps_sub: "Моя коллекция небольших инструментов", manage_apps_title: "Управление приложениями", app_name_ph: "Название", app_url_ph: "Ссылка (URL)", add_app: "Добавить",
