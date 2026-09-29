@@ -4,7 +4,7 @@
   "description": "Find, vet and install the best Skills and MCP servers for Claude Code and Codex",
   "bin": { "skill-scout": "bin/skill-scout.js" },
   "scripts": {
-    "test": "node --test test/skill-scout.test.js test/scan.test.js",
+    "test": "node --test test/skill-scout.test.js test/scan.test.js test/manage.test.js",
     "ui": "node bin/skill-scout.js ui"
   },
   "engines": { "node": ">=18" },

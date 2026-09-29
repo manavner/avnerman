@@ -56,6 +56,30 @@ skill-scout ui                             # web dashboard
 
 <div dir="rtl">
 
+## 🧹 ניהול מה שמותקן: הסרה והסגר (Quarantine)
+
+</div>
+
+```bash
+skill-scout installed                  # everything installed + its risk level, riskiest first
+skill-scout audit --fix                # go over HIGH-risk items one by one: [q]uarantine / [d]elete / [s]kip
+skill-scout remove last30days          # quarantine one item (asks first)
+skill-scout remove last30days --delete # delete permanently
+skill-scout remove github --for codex  # only the Codex copy
+skill-scout quarantine                 # what is in quarantine
+skill-scout restore last30days         # put it back
+```
+
+<div dir="rtl">
+
+* **הסגר (ברירת המחדל):** הפריט עובר לתיקייה `%USERPROFILE%\.skill-scout\quarantine\`, ואפשר להחזיר אותו בפקודה אחת. זו הדרך הבטוחה.
+* **מחיקה (`--delete`):** מחיקה לצמיתות.
+* **מה נתמך:** Skills ושרתי MCP ב-Claude Code (ברמת המשתמש, הפרויקט וה-local) וב-Codex (ברמת המשתמש והפרויקט). שאר ההגדרות בקבצי הקונפיגורציה לא משתנות, ולפני כל שינוי נשמר גיבוי.
+* **Plugins של Claude Code** מוסרים מתוך Claude Code עם `/plugin`.
+* **תווית "official – powerful by design":** פריט רשמי שמסומן HIGH בגלל ההרשאות הרחבות שלו, לא כי הוא זדוני. השאר אותו אם אתה משתמש בו.
+* גם בדשבורד, בלשונית **Installed**, יש כפתורים **Quarantine**, **Delete** ו-**Restore**.
+* אחרי הסרה צריך להפעיל מחדש את Claude Code או את Codex.
+
 ## 🗓️ סריקה שבועית אוטומטית (Windows)
 
 </div>

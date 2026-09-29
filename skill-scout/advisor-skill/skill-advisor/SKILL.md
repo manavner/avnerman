@@ -51,7 +51,27 @@ Lead with security alerts about installed items, then the most relevant new
 items for their projects. Remind them new items are unvetted: offer
 `skill-scout check github:owner/repo` before any install.
 
-## 5. Installing
+## 5. Reviewing and removing risky items
+
+When the user asks what is installed, whether it is safe, or to clean up:
+
+```bash
+skill-scout installed --json      # every skill / MCP server with risk level and reasons
+```
+
+Explain HIGH / BLOCKED / UNKNOWN items in plain words. An item marked
+`official: true` is HIGH because of its permissions, not because it is
+malicious – say so. Only remove after the user agrees, and prefer quarantine
+(restorable) over delete:
+
+```bash
+skill-scout remove <name> --yes            # quarantine (restore: skill-scout restore <name>)
+skill-scout remove <name> --delete --yes   # permanent – only if the user explicitly asks
+```
+
+Remind them to restart Claude Code / Codex afterwards.
+
+## 6. Installing
 
 Only install after the user explicitly agrees to a specific item.
 
