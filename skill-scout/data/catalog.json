@@ -1,0 +1,639 @@
+{
+  "version": 1,
+  "updated": "2026-09-28",
+  "notes": "Curated seed catalog. 'rating' is the curated recommendation strength (1-5) based on community adoption and reputation. Live popularity (GitHub stars, npm downloads) and live security data (OSV, GitHub advisories, issues) are fetched at runtime with --live.",
+  "items": [
+    {
+      "id": "context7",
+      "type": "mcp",
+      "name": "Context7",
+      "publisher": "Upstash",
+      "official": true,
+      "repo": "upstash/context7",
+      "description": "Pulls up-to-date, version-specific library documentation into the prompt so the agent stops inventing outdated APIs.",
+      "tags": ["general", "docs", "web", "frontend", "backend", "node", "python", "react", "nextjs"],
+      "always": true,
+      "rating": 5,
+      "packages": [{ "ecosystem": "npm", "name": "@upstash/context7-mcp" }],
+      "install": { "transport": "http", "url": "https://mcp.context7.com/mcp", "env": [{ "name": "CONTEXT7_API_KEY", "description": "Optional API key for higher rate limits", "optional": true, "header": "CONTEXT7_API_KEY" }] },
+      "security": {
+        "level": "low",
+        "permissions": ["network: sends library names and your queries to context7.com"],
+        "risks": [
+          "Documentation is partly community-submitted; a poisoned doc page could contain prompt-injection text.",
+          "Your search queries (library names, topics) leave your machine."
+        ],
+        "mitigations": ["Do not put secrets in prompts that trigger doc lookups.", "Review code generated from unfamiliar libraries."],
+        "warnings": []
+      }
+    },
+    {
+      "id": "playwright",
+      "type": "mcp",
+      "name": "Playwright MCP",
+      "publisher": "Microsoft",
+      "official": true,
+      "repo": "microsoft/playwright-mcp",
+      "description": "Lets the agent drive a real browser (click, type, screenshot, read the accessibility tree) to test and debug web apps.",
+      "tags": ["web", "frontend", "testing", "browser", "react", "nextjs", "vue", "html"],
+      "rating": 5,
+      "packages": [{ "ecosystem": "npm", "name": "@playwright/mcp" }],
+      "install": { "transport": "stdio", "command": "npx", "args": ["-y", "@playwright/mcp@latest"] },
+      "security": {
+        "level": "medium",
+        "permissions": ["runs a local browser", "network: any site the agent navigates to", "filesystem: screenshots/downloads"],
+        "risks": [
+          "Web pages the agent visits can contain hidden prompt-injection instructions.",
+          "If pointed at a browser profile you are logged into, the agent acts with your identity."
+        ],
+        "mitigations": ["Keep the default isolated profile (or pass --isolated).", "Avoid logging into banking/email in the automated browser."],
+        "warnings": []
+      }
+    },
+    {
+      "id": "chrome-devtools",
+      "type": "mcp",
+      "name": "Chrome DevTools MCP",
+      "publisher": "Google (ChromeDevTools team)",
+      "official": true,
+      "repo": "ChromeDevTools/chrome-devtools-mcp",
+      "description": "Gives the agent Chrome DevTools: console logs, network requests, performance traces, and page inspection for debugging.",
+      "tags": ["web", "frontend", "browser", "testing", "performance", "html", "react", "nextjs"],
+      "rating": 4,
+      "packages": [{ "ecosystem": "npm", "name": "chrome-devtools-mcp" }],
+      "install": { "transport": "stdio", "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest", "--isolated"] },
+      "security": {
+        "level": "medium",
+        "permissions": ["controls a Chrome instance", "can read page content, cookies and network traffic of that browser"],
+        "risks": [
+          "Without --isolated it may use a profile with your logins and cookies.",
+          "Visited pages can inject instructions into the agent."
+        ],
+        "mitigations": ["The catalog install uses --isolated (temporary profile)."],
+        "warnings": []
+      }
+    },
+    {
+      "id": "github",
+      "type": "mcp",
+      "name": "GitHub MCP Server",
+      "publisher": "GitHub",
+      "official": true,
+      "repo": "github/github-mcp-server",
+      "description": "Read and manage repositories, issues, pull requests, Actions and code search from the agent.",
+      "tags": ["github", "git", "general", "devops"],
+      "rating": 5,
+      "install": { "transport": "http", "url": "https://api.githubcopilot.com/mcp/", "env": [{ "name": "GITHUB_PERSONAL_ACCESS_TOKEN", "description": "Fine-grained PAT (limit to the repos you need)", "header": "Authorization", "prefix": "Bearer " }] },
+      "security": {
+        "level": "high",
+        "permissions": ["read/write access to every repo the token can reach", "network: api.github.com"],
+        "risks": [
+          "Toxic agent flow: a malicious public issue can instruct the agent to copy data from your PRIVATE repos into a public PR (Invariant Labs, May 2025).",
+          "A broad classic token gives the agent power to push, delete branches or change settings."
+        ],
+        "mitigations": [
+          "Use a fine-grained token scoped to specific repos, read-only when possible.",
+          "Limit toolsets (e.g. repos,issues,pull_requests) and keep tool-call approval ON.",
+          "Never let the agent process issues from strangers while private repos are in scope."
+        ],
+        "warnings": [
+          { "date": "2025-05", "title": "Prompt-injection 'toxic agent flow' leaks private repo data via public issues (Invariant Labs)", "status": "design risk – mitigate with scoped tokens" }
+        ]
+      }
+    },
+    {
+      "id": "filesystem",
+      "type": "mcp",
+      "name": "Filesystem (reference server)",
+      "publisher": "Model Context Protocol (Anthropic)",
+      "official": true,
+      "repo": "modelcontextprotocol/servers",
+      "description": "Read/write files in directories you explicitly allow. Mostly useful for Claude Desktop – Claude Code and Codex already have file tools.",
+      "tags": ["files"],
+      "rating": 3,
+      "packages": [{ "ecosystem": "npm", "name": "@modelcontextprotocol/server-filesystem" }],
+      "install": { "transport": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "{{ALLOWED_DIR}}"], "env": [{ "name": "ALLOWED_DIR", "description": "Directory the server may access", "arg": true }] },
+      "security": {
+        "level": "medium",
+        "permissions": ["filesystem read/write inside the allowed directories"],
+        "risks": ["Older versions allowed escaping the allowed directory via prefix tricks and symlinks."],
+        "mitigations": ["Use version 2025.7.1 or later (npx -y pulls the latest).", "Allow the smallest directory possible."],
+        "warnings": [
+          { "date": "2025-07", "title": "CVE-2025-53110 directory containment bypass", "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-53110", "status": "fixed in 2025.7.1" },
+          { "date": "2025-07", "title": "CVE-2025-53109 symlink bypass → arbitrary file read/write", "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-53109", "status": "fixed in 2025.7.1" }
+        ]
+      }
+    },
+    {
+      "id": "git",
+      "type": "mcp",
+      "name": "Git (reference server)",
+      "publisher": "Model Context Protocol (Anthropic)",
+      "official": true,
+      "repo": "modelcontextprotocol/servers",
+      "description": "Structured git operations (status, diff, log, commit). Claude Code and Codex can already run git via the shell.",
+      "tags": ["git"],
+      "rating": 2,
+      "packages": [{ "ecosystem": "PyPI", "name": "mcp-server-git" }],
+      "install": { "transport": "stdio", "command": "uvx", "args": ["mcp-server-git"] },
+      "security": {
+        "level": "medium",
+        "permissions": ["filesystem: repositories on disk", "runs git commands"],
+        "risks": ["Earlier versions had path-validation and argument-injection flaws exploitable through prompt injection."],
+        "mitigations": ["Use a version released after December 2025.", "Usually unnecessary with Claude Code / Codex."],
+        "warnings": [
+          { "date": "2026-01", "title": "CVE-2025-68143 / 68144 / 68145: path validation bypass and argument injection (Cyata)", "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-68144", "status": "fixed in 2025.12.18" }
+        ]
+      }
+    },
+    {
+      "id": "memory",
+      "type": "mcp",
+      "name": "Memory (knowledge graph)",
+      "publisher": "Model Context Protocol (Anthropic)",
+      "official": true,
+      "repo": "modelcontextprotocol/servers",
+      "description": "Persistent knowledge-graph memory stored in a local JSON file, so facts survive between sessions.",
+      "tags": ["general", "memory"],
+      "rating": 3,
+      "packages": [{ "ecosystem": "npm", "name": "@modelcontextprotocol/server-memory" }],
+      "install": { "transport": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"] },
+      "security": {
+        "level": "low",
+        "permissions": ["filesystem: writes one local memory JSON file"],
+        "risks": ["Anything stored (including secrets you mention) persists on disk in plain text.", "Poisoned memories can steer later sessions."],
+        "mitigations": ["Don't tell the agent secrets; review the memory file occasionally."],
+        "warnings": []
+      }
+    },
+    {
+      "id": "sequential-thinking",
+      "type": "mcp",
+      "name": "Sequential Thinking",
+      "publisher": "Model Context Protocol (Anthropic)",
+      "official": true,
+      "repo": "modelcontextprotocol/servers",
+      "description": "A structured step-by-step reasoning scratchpad tool for complex planning problems.",
+      "tags": ["general", "planning"],
+      "rating": 3,
+      "packages": [{ "ecosystem": "npm", "name": "@modelcontextprotocol/server-sequential-thinking" }],
+      "install": { "transport": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"] },
+      "security": { "level": "low", "permissions": ["none beyond local process"], "risks": ["Minimal – no file or network access."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "fetch",
+      "type": "mcp",
+      "name": "Fetch (reference server)",
+      "publisher": "Model Context Protocol (Anthropic)",
+      "official": true,
+      "repo": "modelcontextprotocol/servers",
+      "description": "Fetches a URL and converts it to markdown. Claude Code and Codex already have web fetch, so this is mainly for other clients.",
+      "tags": ["web", "search"],
+      "rating": 2,
+      "packages": [{ "ecosystem": "PyPI", "name": "mcp-server-fetch" }],
+      "install": { "transport": "stdio", "command": "uvx", "args": ["mcp-server-fetch"] },
+      "security": {
+        "level": "medium",
+        "permissions": ["network: any URL, including local network addresses"],
+        "risks": ["Can reach internal/localhost services (SSRF).", "Fetched pages can carry prompt injection."],
+        "mitigations": ["Keep tool approval on; don't run on machines with sensitive internal services."],
+        "warnings": []
+      }
+    },
+    {
+      "id": "supabase",
+      "type": "mcp",
+      "name": "Supabase MCP",
+      "publisher": "Supabase",
+      "official": true,
+      "repo": "supabase-community/supabase-mcp",
+      "description": "Manage Supabase projects: tables, SQL, migrations, edge functions, logs.",
+      "tags": ["database", "supabase", "postgres", "backend", "auth"],
+      "rating": 4,
+      "packages": [{ "ecosystem": "npm", "name": "@supabase/mcp-server-supabase" }],
+      "install": { "transport": "http", "url": "https://mcp.supabase.com/mcp?read_only=true" },
+      "security": {
+        "level": "high",
+        "permissions": ["full database access for the connected project (read-only if configured)"],
+        "risks": [
+          "Prompt injection stored in database rows (e.g. a support ticket) can make the agent leak private tables (General Analysis, July 2025).",
+          "Write mode lets the agent drop tables or change data."
+        ],
+        "mitigations": ["The catalog URL enables read_only=true.", "Connect a development project, never production.", "Scope to a single project (project_ref)."],
+        "warnings": [
+          { "date": "2025-07", "title": "Prompt injection via database content can exfiltrate data through the agent (General Analysis report)", "status": "design risk – use read-only + dev project" }
+        ]
+      }
+    },
+    {
+      "id": "stripe",
+      "type": "mcp",
+      "name": "Stripe MCP",
+      "publisher": "Stripe",
+      "official": true,
+      "repo": "stripe/agent-toolkit",
+      "description": "Work with Stripe objects (customers, products, payment links) and search Stripe docs.",
+      "tags": ["payments", "stripe", "backend", "ecommerce"],
+      "rating": 4,
+      "install": { "transport": "http", "url": "https://mcp.stripe.com" },
+      "security": {
+        "level": "high",
+        "permissions": ["acts on your Stripe account (money!) via OAuth or API key"],
+        "risks": ["Mistakes or injected instructions could create refunds, payment links or modify customers."],
+        "mitigations": ["Use TEST mode keys / a restricted key with minimum permissions.", "Keep tool approval on."],
+        "warnings": []
+      }
+    },
+    {
+      "id": "vercel",
+      "type": "mcp",
+      "name": "Vercel MCP",
+      "publisher": "Vercel",
+      "official": true,
+      "repo": null,
+      "description": "Inspect Vercel projects, deployments and build logs; search Vercel docs.",
+      "tags": ["vercel", "devops", "web", "nextjs", "deploy"],
+      "rating": 4,
+      "install": { "transport": "http", "url": "https://mcp.vercel.com" },
+      "security": {
+        "level": "medium",
+        "permissions": ["OAuth access to your Vercel team: projects, deployments, logs"],
+        "risks": ["Build logs can include secrets that then enter the model context."],
+        "mitigations": ["Keep secrets in Vercel env vars, never print them in builds."],
+        "warnings": []
+      }
+    },
+    {
+      "id": "sentry",
+      "type": "mcp",
+      "name": "Sentry MCP",
+      "publisher": "Sentry",
+      "official": true,
+      "repo": "getsentry/sentry-mcp",
+      "description": "Pull production errors, stack traces and issues from Sentry so the agent can debug real failures.",
+      "tags": ["monitoring", "sentry", "backend", "web", "debugging"],
+      "rating": 4,
+      "install": { "transport": "http", "url": "https://mcp.sentry.dev/mcp" },
+      "security": {
+        "level": "medium",
+        "permissions": ["OAuth read access to your Sentry organization"],
+        "risks": ["Error payloads may contain user personal data or tokens that end up in the model context."],
+        "mitigations": ["Enable Sentry data scrubbing."],
+        "warnings": []
+      }
+    },
+    {
+      "id": "figma",
+      "type": "mcp",
+      "name": "Figma Dev Mode MCP",
+      "publisher": "Figma",
+      "official": true,
+      "repo": null,
+      "description": "Turns Figma frames into code context (layout, variables, components) for pixel-accurate UI.",
+      "tags": ["design", "figma", "frontend", "web", "react"],
+      "rating": 4,
+      "install": { "transport": "http", "url": "https://mcp.figma.com/mcp" },
+      "security": { "level": "low", "permissions": ["OAuth read access to Figma files you open"], "risks": ["Design files leave Figma into the model context."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "notion",
+      "type": "mcp",
+      "name": "Notion MCP",
+      "publisher": "Notion",
+      "official": true,
+      "repo": "makenotion/notion-mcp-server",
+      "description": "Search, read and write Notion pages and databases (specs, notes, tasks).",
+      "tags": ["docs", "notion", "project-management", "notes"],
+      "rating": 4,
+      "install": { "transport": "http", "url": "https://mcp.notion.com/mcp" },
+      "security": {
+        "level": "medium",
+        "permissions": ["OAuth read/write to the pages you grant"],
+        "risks": ["Shared pages edited by others can contain prompt injection.", "The agent can edit or delete pages."],
+        "mitigations": ["Grant access only to specific pages/teamspaces."],
+        "warnings": []
+      }
+    },
+    {
+      "id": "linear",
+      "type": "mcp",
+      "name": "Linear MCP",
+      "publisher": "Linear",
+      "official": true,
+      "repo": null,
+      "description": "Create, search and update Linear issues and projects.",
+      "tags": ["project-management", "linear"],
+      "rating": 3,
+      "install": { "transport": "http", "url": "https://mcp.linear.app/mcp" },
+      "security": { "level": "medium", "permissions": ["OAuth read/write to your Linear workspace"], "risks": ["Issue text from others can carry prompt injection."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "atlassian",
+      "type": "mcp",
+      "name": "Atlassian (Jira & Confluence)",
+      "publisher": "Atlassian",
+      "official": true,
+      "repo": null,
+      "description": "Search and update Jira issues and Confluence pages.",
+      "tags": ["project-management", "jira", "confluence", "docs"],
+      "rating": 3,
+      "install": { "transport": "http", "url": "https://mcp.atlassian.com/v1/sse" },
+      "security": { "level": "medium", "permissions": ["OAuth read/write to Jira/Confluence"], "risks": ["Tickets written by others can carry prompt injection."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "cloudflare-docs",
+      "type": "mcp",
+      "name": "Cloudflare Docs",
+      "publisher": "Cloudflare",
+      "official": true,
+      "repo": "cloudflare/mcp-server-cloudflare",
+      "description": "Search Cloudflare documentation (Workers, Pages, R2, D1...).",
+      "tags": ["cloudflare", "docs", "devops", "web"],
+      "rating": 3,
+      "install": { "transport": "http", "url": "https://docs.mcp.cloudflare.com/mcp" },
+      "security": { "level": "low", "permissions": ["network: read-only documentation search"], "risks": ["Minimal."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "microsoft-learn",
+      "type": "mcp",
+      "name": "Microsoft Learn Docs",
+      "publisher": "Microsoft",
+      "official": true,
+      "repo": "MicrosoftDocs/mcp",
+      "description": "Official Microsoft/Azure/.NET documentation search, no auth required.",
+      "tags": ["docs", "dotnet", "azure", "csharp", "windows"],
+      "rating": 3,
+      "install": { "transport": "http", "url": "https://learn.microsoft.com/api/mcp" },
+      "security": { "level": "low", "permissions": ["network: read-only documentation search"], "risks": ["Minimal."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "huggingface",
+      "type": "mcp",
+      "name": "Hugging Face",
+      "publisher": "Hugging Face",
+      "official": true,
+      "repo": "huggingface/hf-mcp-server",
+      "description": "Search models, datasets, Spaces and papers; run Gradio Spaces (image/audio generation) as tools.",
+      "tags": ["ai", "ml", "python", "audio", "music", "images"],
+      "rating": 3,
+      "install": { "transport": "http", "url": "https://huggingface.co/mcp" },
+      "security": { "level": "low", "permissions": ["network: Hugging Face Hub (token optional)"], "risks": ["Community Spaces are third-party code running remotely; outputs are untrusted."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "firecrawl",
+      "type": "mcp",
+      "name": "Firecrawl",
+      "publisher": "Firecrawl (Mendable)",
+      "official": true,
+      "repo": "firecrawl/firecrawl-mcp-server",
+      "description": "Scrape and crawl websites into clean markdown, with search and structured extraction.",
+      "tags": ["scraping", "search", "web", "data"],
+      "rating": 3,
+      "packages": [{ "ecosystem": "npm", "name": "firecrawl-mcp" }],
+      "install": { "transport": "stdio", "command": "npx", "args": ["-y", "firecrawl-mcp"], "env": [{ "name": "FIRECRAWL_API_KEY", "description": "API key from firecrawl.dev" }] },
+      "security": { "level": "medium", "permissions": ["network: crawls arbitrary sites via Firecrawl cloud"], "risks": ["Scraped pages can carry prompt injection.", "Paid API – runaway crawls cost credits."], "mitigations": ["Set crawl limits."], "warnings": [] }
+    },
+    {
+      "id": "brave-search",
+      "type": "mcp",
+      "name": "Brave Search",
+      "publisher": "Brave",
+      "official": true,
+      "repo": "brave/brave-search-mcp-server",
+      "description": "Web, news and image search through the Brave Search API.",
+      "tags": ["search", "web"],
+      "rating": 3,
+      "packages": [{ "ecosystem": "npm", "name": "@brave/brave-search-mcp-server" }],
+      "install": { "transport": "stdio", "command": "npx", "args": ["-y", "@brave/brave-search-mcp-server"], "env": [{ "name": "BRAVE_API_KEY", "description": "API key from brave.com/search/api" }] },
+      "security": { "level": "low", "permissions": ["network: Brave Search API"], "risks": ["Search results can carry prompt injection."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "serena",
+      "type": "mcp",
+      "name": "Serena",
+      "publisher": "Oraios AI (community)",
+      "official": false,
+      "repo": "oraios/serena",
+      "description": "Semantic code navigation and editing using language servers (find symbol, references) – helps on large codebases.",
+      "tags": ["large-codebase", "python", "node", "java", "csharp", "go", "rust"],
+      "rating": 4,
+      "install": { "transport": "stdio", "command": "uvx", "args": ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server"] },
+      "security": {
+        "level": "high",
+        "permissions": ["filesystem read/write of the project", "can execute shell commands", "installs code directly from a git branch (unpinned)"],
+        "risks": ["Unpinned install from git HEAD: a compromised repo would run on your machine immediately.", "Includes a shell-command tool."],
+        "mitigations": ["Pin to a release tag (git+https://github.com/oraios/serena@vX.Y.Z).", "Disable the shell tool in its config if you don't need it."],
+        "warnings": []
+      }
+    },
+    {
+      "id": "desktop-commander",
+      "type": "mcp",
+      "name": "Desktop Commander",
+      "publisher": "wonderwhy-er (community)",
+      "official": false,
+      "repo": "wonderwhy-er/DesktopCommanderMCP",
+      "description": "Terminal and file-system control for chat clients (mostly Claude Desktop). Redundant inside Claude Code / Codex.",
+      "tags": ["shell", "files"],
+      "rating": 2,
+      "packages": [{ "ecosystem": "npm", "name": "@wonderwhy-er/desktop-commander" }],
+      "install": { "transport": "stdio", "command": "npx", "args": ["-y", "@wonderwhy-er/desktop-commander"] },
+      "security": {
+        "level": "high",
+        "permissions": ["full shell access", "read/write anywhere your user can"],
+        "risks": ["Equivalent to giving the model your terminal.", "Collects usage telemetry by default."],
+        "mitigations": ["Not needed in Claude Code / Codex, which have sandboxed shells with approval."],
+        "warnings": []
+      }
+    },
+    {
+      "id": "postgres-reference",
+      "type": "mcp",
+      "name": "PostgreSQL (archived reference server)",
+      "publisher": "Model Context Protocol (Anthropic)",
+      "official": true,
+      "deprecated": true,
+      "repo": "modelcontextprotocol/servers-archived",
+      "description": "Archived read-only Postgres server. Still widely installed from old tutorials.",
+      "tags": ["database", "postgres"],
+      "rating": 1,
+      "packages": [{ "ecosystem": "npm", "name": "@modelcontextprotocol/server-postgres" }],
+      "install": { "transport": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres", "{{DATABASE_URL}}"], "env": [{ "name": "DATABASE_URL", "description": "postgresql://user:pass@host/db", "arg": true }] },
+      "security": {
+        "level": "high",
+        "permissions": ["database access with the given credentials"],
+        "risks": ["Archived and unmaintained.", "Researchers showed its 'read-only' transaction can be escaped with stacked SQL statements."],
+        "mitigations": ["Prefer a maintained server (e.g. your provider's official MCP) and a read-only DB role."],
+        "warnings": [{ "date": "2025", "title": "Archived; read-only bypass via SQL injection reported (Datadog Security Labs)", "status": "will not be fixed" }]
+      }
+    },
+    {
+      "id": "anthropic-document-skills",
+      "type": "plugin",
+      "name": "Anthropic Document Skills (docx, xlsx, pptx, pdf)",
+      "publisher": "Anthropic",
+      "official": true,
+      "repo": "anthropics/skills",
+      "description": "Official skills for creating and editing Word, Excel, PowerPoint and PDF files.",
+      "tags": ["documents", "office", "pdf", "excel", "data", "reports"],
+      "rating": 5,
+      "install": {
+        "kind": "plugin",
+        "claude": ["/plugin marketplace add anthropics/skills", "/plugin install document-skills@anthropic-agent-skills"],
+        "codexSkills": [
+          { "repo": "anthropics/skills", "path": "skills/docx" },
+          { "repo": "anthropics/skills", "path": "skills/xlsx" },
+          { "repo": "anthropics/skills", "path": "skills/pptx" },
+          { "repo": "anthropics/skills", "path": "skills/pdf" }
+        ]
+      },
+      "security": {
+        "level": "low",
+        "permissions": ["runs bundled Python/JS helper scripts locally", "may pip/npm install libraries"],
+        "risks": ["Scripts run with your user permissions (reviewed, official source)."],
+        "mitigations": [],
+        "warnings": []
+      }
+    },
+    {
+      "id": "frontend-design",
+      "type": "skill",
+      "name": "Frontend Design",
+      "publisher": "Anthropic",
+      "official": true,
+      "repo": "anthropics/skills",
+      "description": "Guides the agent to build distinctive, production-grade UIs instead of generic 'AI-looking' pages.",
+      "tags": ["web", "frontend", "design", "react", "html", "css"],
+      "rating": 5,
+      "install": { "kind": "skill", "repo": "anthropics/skills", "path": "skills/frontend-design" },
+      "security": { "level": "low", "permissions": ["instructions only (no scripts)"], "risks": ["Minimal."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "webapp-testing",
+      "type": "skill",
+      "name": "Web App Testing",
+      "publisher": "Anthropic",
+      "official": true,
+      "repo": "anthropics/skills",
+      "description": "Test local web apps with Playwright scripts: screenshots, console logs, UI verification.",
+      "tags": ["web", "frontend", "testing", "browser", "html"],
+      "rating": 4,
+      "install": { "kind": "skill", "repo": "anthropics/skills", "path": "skills/webapp-testing" },
+      "security": { "level": "low", "permissions": ["runs local Python helper scripts", "starts local dev servers"], "risks": ["Scripts run with your user permissions (official source)."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "mcp-builder",
+      "type": "skill",
+      "name": "MCP Builder",
+      "publisher": "Anthropic",
+      "official": true,
+      "repo": "anthropics/skills",
+      "description": "Step-by-step guidance for building high-quality MCP servers (TypeScript or Python).",
+      "tags": ["mcp-dev", "ai", "node", "python"],
+      "rating": 4,
+      "install": { "kind": "skill", "repo": "anthropics/skills", "path": "skills/mcp-builder" },
+      "security": { "level": "low", "permissions": ["instructions + evaluation scripts"], "risks": ["Minimal."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "skill-creator",
+      "type": "skill",
+      "name": "Skill Creator",
+      "publisher": "Anthropic",
+      "official": true,
+      "repo": "anthropics/skills",
+      "description": "Helps you write your own skills and test them.",
+      "tags": ["general", "ai", "skills-dev"],
+      "rating": 4,
+      "install": { "kind": "skill", "repo": "anthropics/skills", "path": "skills/skill-creator" },
+      "security": { "level": "low", "permissions": ["instructions + local helper scripts"], "risks": ["Minimal."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "canvas-design",
+      "type": "skill",
+      "name": "Canvas Design",
+      "publisher": "Anthropic",
+      "official": true,
+      "repo": "anthropics/skills",
+      "description": "Creates posters and visual art as PNG/PDF using design philosophy prompts.",
+      "tags": ["design", "images", "art", "music"],
+      "rating": 3,
+      "install": { "kind": "skill", "repo": "anthropics/skills", "path": "skills/canvas-design" },
+      "security": { "level": "low", "permissions": ["bundled fonts; writes image files"], "risks": ["Minimal."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "superpowers",
+      "type": "plugin",
+      "name": "Superpowers",
+      "publisher": "Jesse Vincent / obra (community)",
+      "official": false,
+      "repo": "obra/superpowers",
+      "description": "Very popular skill library: brainstorming, planning, TDD, systematic debugging, code review workflows.",
+      "tags": ["general", "planning", "testing", "debugging"],
+      "always": true,
+      "rating": 5,
+      "install": {
+        "kind": "plugin",
+        "claude": ["/plugin marketplace add obra/superpowers-marketplace", "/plugin install superpowers@superpowers-marketplace"],
+        "codexSkills": [
+          { "repo": "obra/superpowers", "path": "skills/brainstorming" },
+          { "repo": "obra/superpowers", "path": "skills/systematic-debugging" },
+          { "repo": "obra/superpowers", "path": "skills/test-driven-development" },
+          { "repo": "obra/superpowers", "path": "skills/writing-plans" }
+        ]
+      },
+      "security": {
+        "level": "medium",
+        "permissions": ["instructions that shape agent behaviour", "installs hooks that run on session start"],
+        "risks": ["Third-party plugin: updates are pulled from the author's repo; a future malicious update would run automatically.", "Session-start hooks execute shell commands."],
+        "mitigations": ["Review hooks/ before installing; update deliberately rather than automatically."],
+        "warnings": []
+      }
+    },
+    {
+      "id": "security-guidance",
+      "type": "plugin",
+      "name": "Security Guidance (official plugin)",
+      "publisher": "Anthropic",
+      "official": true,
+      "repo": "anthropics/claude-code",
+      "description": "A hook that warns when the agent writes code with common security issues (injection, XSS, unsafe eval...).",
+      "tags": ["security", "general", "web", "backend"],
+      "rating": 4,
+      "install": { "kind": "plugin", "claude": ["/plugin install security-guidance@claude-plugins-official"] },
+      "security": { "level": "low", "permissions": ["PreToolUse hook (local Python)"], "risks": ["Minimal."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "trailofbits-skills",
+      "type": "plugin",
+      "name": "Trail of Bits Security Skills",
+      "publisher": "Trail of Bits",
+      "official": false,
+      "repo": "trailofbits/skills",
+      "description": "Security-auditing skills from a respected security firm: static analysis, secure code review, fuzzing guidance.",
+      "tags": ["security", "audit", "smart-contracts"],
+      "rating": 4,
+      "install": { "kind": "plugin", "claude": ["/plugin marketplace add trailofbits/skills"] },
+      "security": { "level": "low", "permissions": ["runs analysis tools you install (semgrep, codeql...)"], "risks": ["Reputable publisher; review which sub-plugins you enable."], "mitigations": [], "warnings": [] }
+    },
+    {
+      "id": "openai-skills",
+      "type": "plugin",
+      "name": "OpenAI Skills Catalog (Codex)",
+      "publisher": "OpenAI",
+      "official": true,
+      "repo": "openai/skills",
+      "description": "Official Codex skills catalog; install inside Codex with the built-in $skill-installer.",
+      "tags": ["general", "codex"],
+      "rating": 4,
+      "install": { "kind": "plugin", "codex": ["In Codex run: $skill-installer  (then pick skills from openai/skills)"] },
+      "security": { "level": "low", "permissions": ["varies per skill"], "risks": ["Review each skill's scripts."], "mitigations": [], "warnings": [] }
+    }
+  ],
+  "blocklist": [
+    { "ecosystem": "npm", "name": "postmark-mcp", "reason": "Malicious: from v1.0.16 (Sept 2025) it silently BCC'd every email sent through it to the attacker (reported by Koi Security). Never install." }
+  ],
+  "globalWarnings": [
+    { "match": "mcp-remote", "ecosystem": "npm", "title": "CVE-2025-6514: mcp-remote < 0.1.16 lets a malicious remote server execute commands on your machine (JFrog)", "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-6514" },
+    { "match": "@modelcontextprotocol/inspector", "ecosystem": "npm", "title": "CVE-2025-49596: MCP Inspector < 0.14.1 remote code execution via browser (Oligo)", "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-49596" }
+  ]
+}

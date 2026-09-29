@@ -36,3 +36,10 @@ Single self-contained file: `index.html` (~37 KB). All CSS, JavaScript, and cont
 
 - `AVNERMANICO.png` — profile photo used in hero and about sections
 - `SalsaFlowDj.png` — project thumbnail
+
+## skill-scout/ (separate tool, not part of the website)
+
+Zero-dependency Node.js CLI + local dashboard that recommends, security-checks and installs Skills / MCP servers for Claude Code and Codex. Excluded from Vercel via `.vercelignore`. See `skill-scout/README.md`.
+
+- Catalog (items, risks, known CVEs, blocklist): `skill-scout/data/catalog.json`
+- Tests: `cd skill-scout && npm test`

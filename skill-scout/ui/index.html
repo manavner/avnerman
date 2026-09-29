@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill Scout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0b0f17; --panel:#141a26; --line:#243047; --text:#e6ecf5; --muted:#8a97ad; --accent:#ff8c00; --accent2:#00c8ff;
+          --low:#2ecc71; --medium:#f1c40f; --high:#ff4d4f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:17px/1.45 Rajdhani, system-ui, sans-serif; }
+  header { padding:22px 16px 10px; max-width:1100px; margin:auto; }
+  h1 { font-family:Orbitron, sans-serif; margin:0; font-size:26px; letter-spacing:1px; }
+  h1 span { color:var(--accent); }
+  .sub { color:var(--muted); }
+  nav { display:flex; gap:8px; flex-wrap:wrap; max-width:1100px; margin:12px auto; padding:0 16px; }
+  nav button, .btn { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font:inherit; cursor:pointer; }
+  nav button.on, .btn.primary { background:var(--accent); color:#111; border-color:var(--accent); font-weight:600; }
+  main { max-width:1100px; margin:auto; padding:0 16px 60px; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0 16px; }
+  input[type=text], select { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; min-width:0; }
+  input[type=text] { flex:1 1 260px; }
+  label.chk { color:var(--muted); display:flex; gap:6px; align-items:center; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:14px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:6px; cursor:pointer; }
+  .card:hover { border-color:var(--accent2); }
+  .card h3 { margin:0; font-size:19px; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .tag { font-size:13px; padding:1px 8px; border-radius:99px; border:1px solid var(--line); color:var(--muted); }
+  .t-mcp { color:var(--accent2); border-color:var(--accent2); } .t-skill, .t-plugin { color:var(--accent); border-color:var(--accent); }
+  .lv-low { background:var(--low); color:#062; border:0; } .lv-medium { background:var(--medium); color:#420; border:0; }
+  .lv-high, .lv-blocked { background:var(--high); color:#fff; border:0; }
+  .v-RECOMMENDED { color:var(--low); border-color:var(--low); } .v-AVOID { color:var(--high); border-color:var(--high); }
+  .v-USE { color:var(--medium); border-color:var(--medium); }
+  .meter { height:6px; background:var(--line); border-radius:3px; overflow:hidden; } .meter i { display:block; height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); }
+  .muted { color:var(--muted); font-size:15px; }
+  .warn { color:var(--medium); }
+  dialog { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:14px; width:min(760px, calc(100vw - 32px)); max-height:88vh; padding:20px; }
+  dialog::backdrop { background:#000a; }
+  dialog h2 { font-family:Orbitron, sans-serif; font-size:20px; margin:0 0 6px; }
+  dialog h4 { margin:16px 0 6px; color:var(--accent2); }
+  ul { margin:0; padding-left:20px; }
+  pre { background:#0006; padding:10px; border-radius:8px; white-space:pre-wrap; font-size:13px; max-height:260px; overflow:auto; }
+  a { color:var(--accent2); }
+  .notice { border-left:3px solid var(--accent); padding:6px 12px; background:#ff8c0012; margin:8px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>SKILL <span>SCOUT</span></h1>
+  <div class="sub">Best Skills &amp; MCP servers for Claude Code and Codex – with risks, user warnings and one-click install.</div>
+</header>
+<nav>
+  <button data-tab="recommend" class="on">For my project</button>
+  <button data-tab="top">Top rated</button>
+  <button data-tab="search">Search</button>
+  <button data-tab="news">What's new</button>
+  <button data-tab="installed">Installed</button>
+</nav>
+<main>
+  <div class="bar">
+    <select id="for"><option value="both">Claude Code + Codex</option><option value="claude">Claude Code</option><option value="codex">Codex</option></select>
+    <label class="chk"><input type="checkbox" id="live"> Live data (stars, advisories – slower)</label>
+  </div>
+  <section id="tab-recommend">
+    <div class="bar">
+      <input type="text" id="dir" placeholder="Project folder path">
+      <input type="text" dir="auto" id="describe" placeholder="…or describe the project (English / עברית), e.g. אתר חנות עם תשלומים">
+      <button class="btn primary" id="go-rec">Recommend</button>
+    </div>
+    <div id="detected" class="muted"></div>
+    <div class="grid" id="rec-list"></div>
+  </section>
+  <section id="tab-top" hidden>
+    <div class="bar"><select id="type"><option value="">All</option><option value="mcp">MCP servers</option><option value="skill">Skills &amp; plugins</option></select></div>
+    <div class="grid" id="top-list"></div>
+  </section>
+  <section id="tab-search" hidden>
+    <div class="bar"><input type="text" id="q" placeholder="e.g. database, browser, pdf"><button class="btn primary" id="go-search">Search</button></div>
+    <div class="grid" id="search-list"></div>
+    <div id="search-extra"></div>
+  </section>
+  <section id="tab-news" hidden>
+    <div class="bar"><button class="btn primary" id="go-scan">Scan now</button><span class="muted" id="news-date"></span></div>
+    <div id="news-list"></div>
+  </section>
+  <section id="tab-installed" hidden><div id="installed-list"></div></section>
+</main>
+<dialog id="dlg"></dialog>
+<script>
+const TOKEN = '__TOKEN__';
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+$('#dir').value = '__CWD__';
+try { const f = localStorage.getItem('ss-for'); if (f) $('#for').value = f; } catch {}
+$('#for').onchange = () => { try { localStorage.setItem('ss-for', $('#for').value); } catch {} refresh(); };
+
+async function api(p, params = {}, body) {
+  const qs = new URLSearchParams({ for: $('#for').value, live: $('#live').checked ? '1' : '0', ...params });
+  const r = await fetch(`${p}?${qs}`, { method: body ? 'POST' : 'GET', headers: { 'x-token': TOKEN, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
+  return r.json();
+}
+
+function card(it) {
+  const a = it.assessment || {}; const lvl = a.level || it.security.level;
+  const nWarn = (a.warnings || []).length + (a.userWarnings || []).length + (a.vulns || []).length;
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.innerHTML = `
+    <div class="row"><span class="tag t-${it.type}">${it.type.toUpperCase()}</span><span class="tag lv-${lvl}">${lvl.toUpperCase()} RISK</span>
+      ${it.verdict ? `<span class="tag v-${it.verdict.split(' ')[0]}">${esc(it.verdict)}</span>` : ''}</div>
+    <h3>${esc(it.name)}</h3>
+    <div class="muted">${esc(it.publisher)}${it.official ? ' · official' : ' · community'}${a.popularity && a.popularity.stars ? ' · ★ ' + a.popularity.stars.toLocaleString() : ''}</div>
+    <div>${esc(it.description)}</div>
+    ${it.why ? `<div class="muted">Why: ${esc(it.why.join(', '))}</div>` : ''}
+    <div class="muted">Trust ${a.trust ?? '–'}/100</div><div class="meter"><i style="width:${a.trust || 0}%"></i></div>
+    ${nWarn ? `<div class="warn">⚠ ${nWarn} security warning(s)</div>` : ''}`;
+  el.onclick = () => openInfo(it.id);
+  return el;
+}
+const fill = (sel, rows) => { const g = $(sel); g.innerHTML = ''; rows.forEach((r) => g.appendChild(card(r))); if (!rows.length) g.innerHTML = '<div class="muted">Nothing found.</div>'; };
+
+async function openInfo(id) {
+  const d = $('#dlg'); d.innerHTML = '<div class="muted">Checking live security data…</div>'; d.showModal();
+  const it = await api('/api/info', { id }); const a = it.assessment; const s = it.security;
+  const li = (arr) => arr.length ? `<ul>${arr.join('')}</ul>` : '<div class="muted">None known.</div>';
+  const needs = ((it.install || {}).env || []).filter((e) => e.arg);
+  d.innerHTML = `
+    <h2>${esc(it.name)}</h2>
+    <div class="row"><span class="tag t-${it.type}">${it.type.toUpperCase()}</span><span class="tag lv-${a.level}">${a.level.toUpperCase()} RISK</span><span class="tag">Trust ${a.trust}/100</span>
+      ${it.repo ? `<a href="https://github.com/${esc(it.repo)}" target="_blank" rel="noopener">github.com/${esc(it.repo)}</a>` : ''}</div>
+    <p>${esc(it.description)}</p>
+    <h4>What it can access</h4>${li(s.permissions.map((p) => `<li>${esc(p)}</li>`))}
+    <h4>Risks</h4>${li(s.risks.map((p) => `<li>${esc(p)}</li>`))}
+    ${s.mitigations.length ? `<h4>Use it safely</h4>${li(s.mitigations.map((p) => `<li>${esc(p)}</li>`))}` : ''}
+    <h4>Assessment</h4>${li(a.reasons.map((p) => `<li>${esc(p)}</li>`))}
+    <h4>Known incidents &amp; advisories</h4>${li([...a.warnings.map((w) => `<li class="warn">${esc(w.date || '')} ${esc(w.title)} ${w.status ? `<span class="muted">[${esc(w.status)}]</span>` : ''} ${w.url ? `<a href="${esc(w.url)}" target="_blank" rel="noopener">link</a>` : ''}</li>`),
+      ...a.advisories.map((v) => `<li class="warn">${esc(v.date)} ${esc(v.severity)} – ${esc(v.summary)} <a href="${esc(v.url)}" target="_blank" rel="noopener">link</a></li>`),
+      ...a.vulns.map((v) => `<li class="warn">${esc(v.id)} ${esc(v.summary)} <a href="${esc(v.url)}" target="_blank" rel="noopener">link</a></li>`)])}
+    <h4>User reports (GitHub issues mentioning security)</h4>${li(a.userWarnings.map((w) => `<li>${esc(w.date)} [${esc(w.state)}] <a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.title)}</a></li>`))}
+    <h4>Install</h4>
+    ${a.level === 'blocked' || it.deprecated ? '<div class="notice">Installation disabled: blocked or deprecated.</div>' : `
+    <div class="bar">
+      <select id="i-scope"><option value="user">All my projects</option><option value="project">Only this project folder</option></select>
+      ${needs.map((e) => `<input type="text" data-var="${esc(e.name)}" placeholder="${esc(e.name)} – ${esc(e.description)}">`).join('')}
+      <label class="chk"><input type="checkbox" id="i-dry" checked> Dry run first</label>
+      ${it.type !== 'mcp' ? '<label class="chk"><input type="checkbox" id="i-med"> Accept medium scan findings</label>' : ''}
+      <button class="btn primary" id="i-go">Install for ${esc($('#for').selectedOptions[0].text)}</button>
+    </div>`}
+    <pre id="i-log" hidden></pre>
+    <div class="bar"><button class="btn" onclick="document.getElementById('dlg').close()">Close</button></div>`;
+  const go = $('#i-go'); if (!go) return;
+  go.onclick = async () => {
+    const dry = $('#i-dry').checked;
+    if (!dry && !confirm(`Install ${it.name}? Make sure you read the risks above.`)) return;
+    const values = {}; d.querySelectorAll('[data-var]').forEach((i) => (values[i.dataset.var] = i.value));
+    const log = $('#i-log'); log.hidden = false; log.textContent = 'Working…';
+    const r = await api('/api/install', {}, { id: it.id, for: $('#for').value, scope: $('#i-scope').value, dir: $('#dir').value, dryRun: dry, acceptMedium: !!($('#i-med') || {}).checked, values });
+    log.textContent = (r.logs || [r.error]).join('\n') + (r.ok ? `\n\n✓ ${dry ? 'Dry run OK – uncheck "Dry run" to install for real.' : 'Installed. Restart Claude Code / Codex.'}` : '\n\n✖ Not installed.');
+  };
+}
+
+async function doRecommend() {
+  $('#rec-list').innerHTML = '<div class="muted">Analyzing…</div>';
+  const r = await api('/api/recommend', { dir: $('#describe').value ? '' : $('#dir').value, describe: $('#describe').value });
+  $('#detected').textContent = 'Detected: ' + (Object.keys(r.detected).join(', ') || 'nothing specific – general picks');
+  fill('#rec-list', r.rows);
+}
+async function doTop() { $('#top-list').innerHTML = '<div class="muted">Loading…</div>'; fill('#top-list', await api('/api/top', { type: $('#type').value })); }
+async function doSearch() {
+  const r = await api('/api/search', { q: $('#q').value }); fill('#search-list', r.catalog);
+  const ext = [...r.registry.map((s) => `<li><b>${esc(s.name)}</b> <span class="muted">${esc(s.description)}</span> ${s.repo ? `<a href="https://github.com/${esc(s.repo)}" target="_blank" rel="noopener">repo</a>` : ''}</li>`),
+               ...r.github.map((g) => `<li>★ ${g.stars} <b>${esc(g.repo)}</b> <span class="muted">${esc(g.description)}</span></li>`)];
+  $('#search-extra').innerHTML = ext.length ? `<h3>Also found (not vetted – audit with <code>skill-scout check</code> before installing)</h3><ul>${ext.join('')}</ul>` : '';
+}
+async function doInstalled() {
+  const r = await api('/api/installed', { dir: $('#dir').value });
+  const block = (t, l) => `<h3>${t}</h3><div>${l.length ? l.map((x) => `<span class="tag">${esc(x)}</span>`).join(' ') : '<span class="muted">none</span>'}</div>`;
+  $('#installed-list').innerHTML = block('Claude Code – MCP', r.claudeMcp) + block('Claude Code – skills', r.claudeSkills) + block('Codex – MCP', r.codexMcp) + block('Codex – skills', r.codexSkills);
+}
+function renderNews(r) {
+  if (!r) { $('#news-date').textContent = 'No scan yet – press "Scan now" (takes 1–2 minutes).'; $('#news-list').innerHTML = ''; return; }
+  $('#news-date').textContent = `Last scan ${r.date.slice(0, 10)} · changes since ${r.since.slice(0, 10)}${r.firstRun ? ' (first scan)' : ''}`;
+  const gh = (repo) => `<a href="https://github.com/${esc(repo)}" target="_blank" rel="noopener">${esc(repo)}</a>`;
+  const sec = [...r.security.flatMap((s) => s.items.map((i) => `<li class="warn"><b>${esc(s.name)}</b> – ${esc(i.kind)}: ${esc(i.title)} <a href="${esc(i.url)}" target="_blank" rel="noopener">link</a></li>`)),
+               ...r.skillChanges.map((s) => `<li class="warn">Skill <code>${esc(s.dir)}</code>: ${s.changed ? 'files changed, ' : ''}risk ${esc(s.level)}</li>`)];
+  const list = (arr, empty) => arr.length ? `<ul>${arr.join('')}</ul>` : `<div class="muted">${empty}</div>`;
+  $('#news-list').innerHTML =
+    `<h3>⚠️ Security of what you have installed</h3>${list(sec, 'No new warnings ✅')}` +
+    `<h3>🆕 New in the official MCP registry</h3>${list(r.newRegistry.map((s) => `<li>★ ${s.stars} <b>${esc(s.title)}</b> <span class="muted">${esc(s.description)}</span> ${gh(s.repo)}</li>`), 'Nothing notable.')}` +
+    `<h3>🌱 New on GitHub</h3>${list(r.newRepos.map((x) => `<li>★ ${x.stars} [${esc(x.kind)}] ${gh(x.repo)} <span class="muted">${esc(x.description)}</span></li>`), 'Nothing notable.')}` +
+    `<h3>📈 Rising fast</h3>${list(r.rising.map((x) => `<li>+${x.gained} ★ [${esc(x.kind)}] ${gh(x.repo)}</li>`), r.firstRun ? 'Available from the next scan.' : 'Nothing notable.')}` +
+    (r.errors.length ? `<div class="notice">${r.errors.map(esc).join('<br>')}</div>` : '') +
+    `<div class="notice">New items are not vetted. Audit before installing: <code>skill-scout check github:owner/repo</code></div>`;
+}
+async function doNews() { renderNews(await api('/api/news')); }
+$('#go-scan').onclick = async () => { $('#news-date').textContent = 'Scanning… (1–2 minutes)'; renderNews(await api('/api/scan', {}, {})); };
+let tab = 'recommend';
+const loaders = { recommend: doRecommend, top: doTop, search: () => $('#q').value && doSearch(), installed: doInstalled, news: doNews };
+function refresh() { loaders[tab](); }
+document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
+  tab = b.dataset.tab; document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('on', x === b));
+  document.querySelectorAll('main section').forEach((s) => (s.hidden = s.id !== 'tab-' + tab)); refresh();
+});
+$('#go-rec').onclick = doRecommend; $('#go-search').onclick = doSearch; $('#type').onchange = doTop; $('#live').onchange = refresh;
+$('#q').onkeydown = (e) => e.key === 'Enter' && doSearch();
+doRecommend();
+</script>
+</body>
+</html>
