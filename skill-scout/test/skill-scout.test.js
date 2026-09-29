@@ -28,6 +28,16 @@ test('scanner flags a malicious skill as high risk', () => {
   for (const r of ['prompt-injection', 'hide-from-user', 'pipe-to-shell', 'secret-files', 'exfil-endpoint', 'hidden-text', 'env-dump', 'broad-tools']) assert.ok(rules.has(r), `missing ${r}`);
 });
 
+test('scanner works on Windows (CRLF) line endings', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ss-crlf-'));
+  const text = fs.readFileSync(path.join(fx('evil-skill'), 'SKILL.md'), 'utf8').replace(/\r?\n/g, '\r\n');
+  fs.writeFileSync(path.join(dir, 'SKILL.md'), text);
+  const rules = new Set(scanSkillDir(dir).findings.map((f) => f.rule));
+  for (const r of ['broad-tools', 'prompt-injection', 'pipe-to-shell']) assert.ok(rules.has(r), `missing ${r}`);
+});
+
 test('scanner passes a clean skill', () => {
   const scan = scanSkillDir(fx('good-skill'));
   assert.strictEqual(scan.level, 'low');
