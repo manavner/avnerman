@@ -50,6 +50,21 @@ async function handle(req, res, url, token) {
       if (req.method !== 'POST') return send(405, { error: 'POST only' });
       return send(200, await require('./scan').scan());
     }
+    case '/api/audit': return send(200, require('./manage').audit(q.dir ? path.resolve(q.dir) : process.cwd()));
+    case '/api/quarantine': return send(200, require('./manage').listQuarantine());
+    case '/api/remove':
+    case '/api/restore': {
+      if (req.method !== 'POST') return send(405, { error: 'POST only' });
+      const body = JSON.parse(await new Promise((r) => { let d = ''; req.on('data', (x) => (d += x)); req.on('end', () => r(d || '{}')); }));
+      const manage = require('./manage');
+      try {
+        if (url.pathname === '/api/restore') return send(200, { ok: true, restored: manage.restore(String(body.id || '')) });
+        const cwd = body.dir ? path.resolve(body.dir) : process.cwd();
+        const it = manage.inventory(cwd).find((x) => x.key === body.key);
+        if (!it) return send(404, { error: 'Not installed (anymore?) – refresh the list.' });
+        return send(200, { ok: true, removed: manage.remove({ ...it, risk: manage.riskOf(it) }, { permanent: !!body.permanent, reason: 'dashboard', cwd }) });
+      } catch (e) { return send(400, { error: e.message }); }
+    }
     case '/api/installed': return send(200, installer.listInstalled(q.dir ? path.resolve(q.dir) : process.cwd()));
     case '/api/install': {
       if (req.method !== 'POST') return send(405, { error: 'POST only' });

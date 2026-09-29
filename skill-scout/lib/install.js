@@ -222,7 +222,7 @@ function listInstalled(cwd) {
   if (mcpJson && mcpJson.mcpServers) out.claudeMcp.push(...Object.keys(mcpJson.mcpServers).map((n) => `${n} (project)`));
   for (const f of [path.join(CODEX_HOME, 'config.toml'), path.join(cwd, '.codex', 'config.toml')]) {
     if (!exists(f)) continue;
-    for (const m of fs.readFileSync(f, 'utf8').matchAll(/^\[mcp_servers\.("?)([^\]"]+)\1\]/gm)) out.codexMcp.push(m[2]);
+    out.codexMcp.push(...require('./manage').codexServers(fs.readFileSync(f, 'utf8')));
   }
   const ls = (d) => { try { return fs.readdirSync(d).filter((n) => exists(path.join(d, n, 'SKILL.md'))); } catch { return []; } };
   out.claudeSkills.push(...ls(path.join(HOME, '.claude', 'skills')), ...ls(path.join(cwd, '.claude', 'skills')).map((n) => `${n} (project)`));

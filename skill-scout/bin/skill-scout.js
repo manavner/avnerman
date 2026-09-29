@@ -21,7 +21,11 @@ ${c.bold('Usage')}
   skill-scout check <id | npm:pkg | github:owner/repo[/path] | ./local/dir>
                                                       Security audit (vulnerabilities, user warnings, skill scan)
   skill-scout install <id | github:owner/repo/path>   Install after showing risks and asking you
-  skill-scout installed                               What is already installed (Claude Code + Codex)
+  skill-scout installed                               Everything installed (Claude Code + Codex) with its risk level
+  skill-scout audit [--fix]                           Same, and --fix offers to quarantine/delete HIGH-risk items one by one
+  skill-scout remove <name> [--delete]                Remove a skill or MCP server (default: quarantine, can be restored)
+  skill-scout quarantine                              List quarantined items
+  skill-scout restore <id|name>                       Put a quarantined item back
   skill-scout ui [--port 4477]                        Open the web dashboard
   skill-scout setup                                   Install the "skill-advisor" skill into Claude Code & Codex
   skill-scout scan [--notify]                         Look for NEW skills/MCP servers + new security alerts since last scan
@@ -45,20 +49,36 @@ function parseArgs(argv) {
     const a = argv[i];
     if (!a.startsWith('--')) { opts._.push(a); continue; }
     const key = a.slice(2);
-    if (['live', 'json', 'dry-run', 'yes', 'force', 'offline', 'no-open', 'scan', 'help', 'notify', 'remove', 'status'].includes(key)) { opts[key] = true; continue; }
+    if (['live', 'json', 'dry-run', 'yes', 'force', 'offline', 'no-open', 'scan', 'help', 'notify', 'remove', 'status', 'fix', 'delete'].includes(key)) { opts[key] = true; continue; }
     const val = argv[++i];
     if (key === 'set') { const [k, ...v] = (val || '').split('='); opts.set[k] = v.join('='); } else opts[key] = val;
   }
   opts.target = opts.for || 'both';
+  opts.scopeFilter = opts.scope; // remove: only filter by scope when given
   opts.scope = opts.scope || 'user';
   if (!['claude', 'codex', 'both'].includes(opts.target)) throw new Error('--for must be claude, codex or both');
-  if (!['user', 'project'].includes(opts.scope)) throw new Error('--scope must be user or project');
+  if (!['user', 'project', 'local'].includes(opts.scope)) throw new Error('--scope must be user or project');
+  if (opts.kind && !['skill', 'mcp'].includes(opts.kind)) throw new Error('--kind must be skill or mcp');
   return opts;
 }
 
-function ask(question) {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => rl.question(`${question} [y/N] `, (ans) => { rl.close(); resolve(/^y(es)?$/i.test(ans.trim())); }));
+// One shared line reader: separate readline instances lose buffered answers
+// when several questions are answered from piped input.
+let rl = null;
+const pendingLines = [];
+const waiting = [];
+function prompt(question) {
+  if (!rl) {
+    rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.on('line', (l) => (waiting.length ? waiting.shift()(l) : pendingLines.push(l)));
+    rl.on('close', () => { while (waiting.length) waiting.shift()(''); });
+  }
+  process.stdout.write(question);
+  return new Promise((resolve) => (pendingLines.length ? resolve(pendingLines.shift()) : waiting.push(resolve))).then((a) => a.trim());
+}
+
+async function ask(question) {
+  return /^y(es)?$/i.test(await prompt(`${question} [y/N] `));
 }
 
 const typeLabel = (t) => ({ mcp: c.blue('MCP   '), skill: c.magenta('SKILL '), plugin: c.cyan('PLUGIN') }[t] || t);
@@ -244,13 +264,77 @@ function finish(ok, opts) {
   if (!ok) process.exitCode = 1;
 }
 
-function cmdInstalled(o) {
-  const r = installer.listInstalled(process.cwd());
-  if (o.json) return console.log(JSON.stringify(r, null, 2));
-  const show = (title, list) => console.log(`${c.bold(title)}: ${list.length ? list.join(', ') : c.dim('none')}`);
-  show('Claude Code MCP servers', r.claudeMcp); show('Claude Code skills', r.claudeSkills);
-  show('Codex MCP servers', r.codexMcp); show('Codex skills', r.codexSkills);
-  console.log(c.dim('(Claude Code plugins: run /plugin inside Claude Code)'));
+const riskBadge = (lvl) => (lvl === 'unknown' ? c.magenta('UNKNOWN') : levelBadge(lvl));
+const where = (it) => `${it.agent === 'claude' ? 'Claude Code' : 'Codex'} ${it.kind === 'mcp' ? 'MCP' : 'skill'}, ${it.scope}`;
+
+function printAuditRow(it, i) {
+  const note = it.risk.official && it.risk.level === 'high' ? c.cyan('  official – powerful by design, keep it if you use it') : '';
+  console.log(`${String(i + 1).padStart(2)}. ${riskBadge(it.risk.level).padEnd(8)} ${c.bold(it.name)}  ${c.dim(where(it))}${note}`);
+  it.risk.reasons.forEach((r) => console.log(c.dim(`       • ${r}`)));
+}
+
+async function cmdAudit(o) {
+  const manage = require('../lib/manage');
+  const rows = manage.audit(process.cwd());
+  if (o.json) return console.log(JSON.stringify(rows, null, 2));
+  if (!rows.length) return console.log('Nothing installed (skills or MCP servers) was found.');
+  console.log(c.bold(`\nInstalled skills & MCP servers (${rows.length}) – riskiest first\n`));
+  rows.forEach(printAuditRow);
+  console.log(c.dim('\n(Claude Code plugins are managed inside Claude Code with /plugin.)'));
+  const risky = rows.filter((r) => ['blocked', 'high'].includes(r.risk.level));
+  if (!o.fix) {
+    if (risky.length) console.log(c.yellow(`\n${risky.length} HIGH-risk item(s). Review them with: skill-scout audit --fix`));
+    return;
+  }
+  if (!risky.length) return console.log(c.green('\nNo HIGH-risk items. Nothing to fix.'));
+  console.log(c.bold('\nFor each HIGH-risk item: [q] quarantine (can be restored)  [d] delete permanently  [s] skip'));
+  for (const it of risky) {
+    const ans = (await askChoice(`\n${it.name} (${where(it)}) → [q/d/s]? `)).toLowerCase();
+    if (ans === 'q' || ans === 'd') removeOne(it, { permanent: ans === 'd', reason: 'audit --fix' });
+    else console.log(c.dim('  skipped'));
+  }
+  console.log(c.dim('\nRestart Claude Code / Codex for changes to take effect.'));
+}
+
+function removeOne(it, { permanent, reason }) {
+  const manage = require('../lib/manage');
+  const m = manage.remove(it, { permanent, reason, cwd: process.cwd() });
+  console.log(permanent ? c.red(`  ✓ Deleted ${it.name}`) : c.green(`  ✓ Quarantined ${it.name}. Undo with: skill-scout restore ${m.id}`));
+}
+
+const askChoice = prompt;
+
+async function cmdRemove(o) {
+  const manage = require('../lib/manage');
+  const name = o._[1];
+  if (!name) throw new Error('Usage: skill-scout remove <name> [--for claude|codex] [--scope user|project|local] [--kind skill|mcp] [--delete]');
+  const matches = manage.find(name, { agent: o.target, scope: o.scopeFilter, kind: o.kind, cwd: process.cwd() });
+  if (!matches.length) throw new Error(`"${name}" is not installed here. See: skill-scout installed`);
+  console.log(c.bold(`\nFound ${matches.length} installation(s) of "${name}":`));
+  const rows = matches.map((it) => ({ ...it, risk: manage.riskOf(it) }));
+  rows.forEach(printAuditRow);
+  const action = o.delete ? c.red('DELETE PERMANENTLY') : 'QUARANTINE (restorable)';
+  if (!o.yes && !(await ask(`\n${action} ${rows.length > 1 ? 'all of these' : 'it'}?`))) return console.log('Cancelled.');
+  rows.forEach((it) => removeOne(it, { permanent: !!o.delete, reason: 'manual' }));
+  console.log(c.dim('\nRestart Claude Code / Codex for changes to take effect.'));
+}
+
+function cmdQuarantine(o) {
+  const list = require('../lib/manage').listQuarantine();
+  if (o.json) return console.log(JSON.stringify(list, null, 2));
+  if (!list.length) return console.log('Quarantine is empty.');
+  console.log(c.bold('\nQuarantined items (newest first)\n'));
+  list.forEach((m) => console.log(`  ${c.bold(m.name)}  ${c.dim(`${m.agent} ${m.kind}, ${m.scope} – removed ${m.removedAt.slice(0, 16).replace('T', ' ')}${m.risk ? ', risk ' + m.risk : ''}`)}\n     restore: skill-scout restore ${m.id}`));
+}
+
+function cmdRestore(o) {
+  const manage = require('../lib/manage');
+  const q = o._[1];
+  if (!q) throw new Error('Usage: skill-scout restore <id|name>   (see: skill-scout quarantine)');
+  const hit = manage.listQuarantine().find((m) => m.id === q || m.name === q);
+  if (!hit) throw new Error(`Nothing in quarantine matches "${q}"`);
+  const m = manage.restore(hit.id);
+  console.log(c.green(`✓ Restored ${m.name} (${m.agent} ${m.kind}, ${m.scope}). Restart Claude Code / Codex.`));
 }
 
 async function cmdSetup(o) {
@@ -322,10 +406,12 @@ function cmdSchedule(o) {
 async function main() {
   const o = parseArgs(process.argv.slice(2));
   const cmd = o._[0];
-  const table = { top: cmdTop, recommend: cmdRecommend, rec: cmdRecommend, search: cmdSearch, info: cmdInfo, check: cmdCheck, install: cmdInstall, installed: cmdInstalled, setup: cmdSetup, scan: cmdScan, news: cmdNews, schedule: cmdSchedule, ui: (x) => require('../lib/server').start(x) };
+  const table = { top: cmdTop, recommend: cmdRecommend, rec: cmdRecommend, search: cmdSearch, info: cmdInfo, check: cmdCheck, install: cmdInstall, installed: cmdAudit, audit: cmdAudit, remove: cmdRemove, uninstall: cmdRemove, quarantine: cmdQuarantine, restore: cmdRestore, setup: cmdSetup, scan: cmdScan, news: cmdNews, schedule: cmdSchedule, ui: (x) => require('../lib/server').start(x) };
   if (!cmd || cmd === 'help' || o.help) return console.log(HELP);
   if (!table[cmd]) throw new Error(`Unknown command "${cmd}". Run: skill-scout help`);
   await table[cmd](o);
 }
 
-main().catch((e) => { console.error(c.red(`Error: ${e.message}`)); process.exitCode = 1; });
+main()
+  .catch((e) => { console.error(c.red(`Error: ${e.message}`)); process.exitCode = 1; })
+  .finally(() => { if (rl) rl.close(); });
