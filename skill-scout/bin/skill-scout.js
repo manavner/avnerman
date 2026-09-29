@@ -4,7 +4,7 @@ const path = require('path');
 const readline = require('readline');
 const catalog = require('../lib/catalog');
 const src = require('../lib/sources');
-const { assess, scanSkillDir } = require('../lib/security');
+const { assess, scanSkillDir, scanLines } = require('../lib/security');
 const { recommend, top } = require('../lib/recommend');
 const { detectProject, tagsFromText } = require('../lib/detect');
 const installer = require('../lib/install');
@@ -208,10 +208,8 @@ async function cmdCheck(o) {
 }
 
 function printScan(scan) {
-  console.log(`\nSkill scan: ${scan.files} files → risk ${levelBadge(scan.level)}`);
-  if (!scan.findings.length) console.log(c.green('  No suspicious patterns found.'));
-  scan.findings.forEach((f) => console.log(`  ${f.severity === 'high' ? c.red('HIGH') : f.severity === 'medium' ? c.yellow('MED ') : c.dim('LOW ')} ${f.file}:${f.line}  ${f.msg}${f.text ? c.dim('  → ' + f.text) : ''}`));
-  console.log(c.dim('  (Pattern scanning catches common tricks, not everything – read SKILL.md before trusting a skill.)'));
+  console.log('');
+  scanLines(scan).forEach((l) => console.log(l));
 }
 
 async function cmdInstall(o) {
@@ -288,7 +286,11 @@ function printReport(r) {
   console.log(c.bold(c.yellow('\n⚠ Security of what you have installed')));
   if (!r.security.length && !r.skillChanges.length) console.log(c.green('  No new warnings.'));
   r.security.forEach((s) => { console.log(`  ${c.bold(s.name)} (${levelBadge(s.level)})`); s.items.forEach((i) => console.log(`    • ${i.kind}: ${i.title}\n      ${c.dim(i.url)}`)); });
-  r.skillChanges.forEach((s) => console.log(`  Skill ${s.dir}: ${s.changed ? c.yellow('files changed, ') : ''}risk ${levelBadge(s.level)}`));
+  r.skillChanges.forEach((s) => {
+    console.log(`  Skill ${c.bold(s.dir)}: ${s.changed ? c.yellow('files CHANGED, ') : ''}risk ${levelBadge(s.level)}`);
+    (s.top || []).forEach((t) => console.log(`    • ${t}`));
+    console.log(c.dim(`    details: skill-scout check "${s.dir}"`));
+  });
   console.log(c.bold('\n🆕 New in the official MCP registry (with GitHub traction)'));
   if (!r.newRegistry.length) console.log(c.dim('  Nothing notable.'));
   r.newRegistry.forEach((s) => console.log(`  ★ ${String(s.stars).padStart(5)}  ${c.bold(s.title)}  ${c.dim(s.description.slice(0, 70))}  github:${s.repo}`));

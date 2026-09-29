@@ -9,7 +9,7 @@ const catalog = require('./catalog');
 const src = require('./sources');
 const { assess, scanSkillDir } = require('./security');
 const { listInstalled, skillDirs } = require('./install');
-const { DATA_DIR, fetchJson, githubHeaders, setCache } = require('./util');
+const { DATA_DIR, LEVEL_ORDER, fetchJson, githubHeaders, setCache } = require('./util');
 
 const SNAP_FILE = path.join(DATA_DIR, 'snapshot.json');
 const REPORT_DIR = path.join(DATA_DIR, 'reports');
@@ -62,7 +62,7 @@ async function runScan({ minStars = 20, log = () => {} } = {}) {
   const sinceDay = since.slice(0, 10);
   const report = { date: now.toISOString(), since, firstRun: !prev, newRegistry: [], newRepos: [], rising: [], security: [], skillChanges: [], errors: [] };
   // Start from the previous snapshot so an offline source doesn't erase its baseline.
-  const snap = { date: now.toISOString(), registryNames: prev ? [...prev.registryNames] : [], stars: { ...(prev && prev.stars) }, findings: { ...(prev && prev.findings) }, skillHashes: {} };
+  const snap = { date: now.toISOString(), registryNames: prev ? [...prev.registryNames] : [], stars: { ...(prev && prev.stars) }, findings: { ...(prev && prev.findings) }, skills: {} };
   const known = new Set(snap.registryNames);
   const catalogRepos = new Set(catalog.all().map((i) => i.repo).filter(Boolean));
 
@@ -115,7 +115,8 @@ async function runScan({ minStars = 20, log = () => {} } = {}) {
     if (a.level === 'blocked' || fresh.length) report.security.push({ id: item.id, name: item.name, level: a.level, items: fresh });
   }
 
-  // 4. Installed skills: re-scan locally and notice if their files changed.
+  // 4. Installed skills: re-scan locally. Alert the first time a skill is HIGH,
+  //    when its files change, or when its risk goes up – not every week.
   for (const base of skillDirs('both', 'user', process.cwd())) {
     let dirs = [];
     try { dirs = fs.readdirSync(base); } catch { continue; }
@@ -123,10 +124,15 @@ async function runScan({ minStars = 20, log = () => {} } = {}) {
       const dir = path.join(base, d);
       if (!fs.existsSync(path.join(dir, 'SKILL.md'))) continue;
       const res = scanSkillDir(dir);
-      const sig = `${res.files}:${res.findings.length}:${res.level}`;
-      snap.skillHashes[dir] = sig;
-      const before = prev && prev.skillHashes && prev.skillHashes[dir];
-      if (res.level === 'high' || (before && before !== sig)) report.skillChanges.push({ dir, level: res.level, changed: !!before && before !== sig, findings: res.findings.filter((f) => f.severity !== 'low').length });
+      snap.skills[dir] = { hash: res.hash, level: res.level };
+      const before = prev && prev.skills && prev.skills[dir];
+      const changed = !!before && before.hash !== res.hash;
+      const escalated = !!before && LEVEL_ORDER[res.level] > LEVEL_ORDER[before.level];
+      if (changed || escalated || (!before && res.level === 'high')) {
+        const top = res.summary.filter((g) => g.severity === 'high').slice(0, 4)
+          .map((g) => `${g.msg} (${g.count}x, e.g. ${g.examples[0].file}:${g.examples[0].line})`);
+        report.skillChanges.push({ dir, level: res.level, changed, top });
+      }
     }
   }
 
@@ -146,7 +152,10 @@ function toMarkdown(r) {
     L.push(`### ${s.name} (${s.id}) – risk ${s.level.toUpperCase()}`);
     s.items.forEach((i) => L.push(`- **${i.kind}**: ${i.title} – ${i.url}`));
   }
-  for (const s of r.skillChanges) L.push(`- Skill \`${s.dir}\`: ${s.changed ? 'files CHANGED since last scan, ' : ''}risk ${s.level.toUpperCase()} (${s.findings} findings) – run \`skill-scout check "${s.dir}"\``);
+  for (const s of r.skillChanges) {
+    L.push(`- Skill \`${s.dir}\`: ${s.changed ? 'files CHANGED since last scan, ' : ''}risk ${s.level.toUpperCase()} – details: \`skill-scout check "${s.dir}"\``);
+    (s.top || []).forEach((t) => L.push(`  - ${t}`));
+  }
   L.push('', '## 🆕 New in the official MCP registry (with GitHub traction)', '');
   if (!r.newRegistry.length) L.push('Nothing notable.');
   r.newRegistry.forEach((s) => L.push(`- **${s.title}** ★${s.stars} – ${s.description} (github:${s.repo})`));
