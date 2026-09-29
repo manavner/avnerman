@@ -53,7 +53,8 @@ function scanSkillDir(dir) {
     if (BINARY_EXT.test(file)) { findings.push({ severity: 'medium', rule: 'binary', file: rel, line: 0, msg: 'Bundled executable/binary cannot be reviewed' }); continue; }
     if (!TEXT_EXT.test(file)) continue;
     let text;
-    try { text = fs.readFileSync(file, 'utf8'); } catch { continue; }
+    // Normalise Windows (CRLF) line endings so every rule sees the same text.
+    try { text = fs.readFileSync(file, 'utf8').replace(/\r\n?/g, '\n'); } catch { continue; }
     const lines = text.split('\n');
     lines.forEach((ln, i) => {
       if (HIDDEN_CHARS.test(ln)) findings.push({ severity: 'high', rule: 'hidden-text', file: rel, line: i + 1, msg: 'Invisible/bidi Unicode characters (can hide instructions)' });
