@@ -185,7 +185,7 @@ function renderNews(r) {
   $('#news-date').textContent = `Last scan ${r.date.slice(0, 10)} · changes since ${r.since.slice(0, 10)}${r.firstRun ? ' (first scan)' : ''}`;
   const gh = (repo) => `<a href="https://github.com/${esc(repo)}" target="_blank" rel="noopener">${esc(repo)}</a>`;
   const sec = [...r.security.flatMap((s) => s.items.map((i) => `<li class="warn"><b>${esc(s.name)}</b> – ${esc(i.kind)}: ${esc(i.title)} <a href="${esc(i.url)}" target="_blank" rel="noopener">link</a></li>`)),
-               ...r.skillChanges.map((s) => `<li class="warn">Skill <code>${esc(s.dir)}</code>: ${s.changed ? 'files changed, ' : ''}risk ${esc(s.level)}</li>`)];
+               ...r.skillChanges.map((s) => `<li class="warn">Skill <code>${esc(s.dir)}</code>: ${s.changed ? 'files CHANGED, ' : ''}risk ${esc(s.level)}${(s.top || []).length ? `<ul>${s.top.map((t) => `<li class="muted">${esc(t)}</li>`).join('')}</ul>` : ''}</li>`)];
   const list = (arr, empty) => arr.length ? `<ul>${arr.join('')}</ul>` : `<div class="muted">${empty}</div>`;
   $('#news-list').innerHTML =
     `<h3>⚠️ Security of what you have installed</h3>${list(sec, 'No new warnings ✅')}` +

@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { HOME, c, exists } = require('./util');
-const { scanSkillDir } = require('./security');
+const { scanSkillDir, scanLines } = require('./security');
 
 const CODEX_HOME = process.env.CODEX_HOME || path.join(HOME, '.codex');
 
@@ -146,12 +146,7 @@ function fetchRepoPath(repo, subpath, ref, log) {
 }
 
 function printScan(scan, log) {
-  const counts = { high: 0, medium: 0, low: 0 };
-  scan.findings.forEach((f) => counts[f.severity]++);
-  log(`Security scan: ${scan.files} files – ${c.red(counts.high + ' high')}, ${c.yellow(counts.medium + ' medium')}, ${counts.low} low`);
-  for (const f of scan.findings.filter((x) => x.severity !== 'low').slice(0, 15)) {
-    log(`  ${f.severity === 'high' ? c.red('HIGH') : c.yellow('MED ')} ${f.file}:${f.line}  ${f.msg}${f.text ? c.dim('  → ' + f.text) : ''}`);
-  }
+  scanLines(scan).forEach((l) => log(l));
 }
 
 async function installSkill({ repo, path: subpath, ref }, opts) {
