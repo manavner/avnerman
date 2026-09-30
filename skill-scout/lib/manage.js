@@ -138,6 +138,17 @@ function catalogMatch(it) {
   )) || null;
 }
 
+// catalog id -> ['Claude Code', 'Codex'] for everything that is installed.
+function installedCatalogIds(cwd = process.cwd()) {
+  const out = {};
+  for (const it of inventory(cwd)) {
+    const id = it.kind === 'skill' ? it.name : (catalogMatch(it) || {}).id || it.name;
+    const label = it.agent === 'claude' ? 'Claude Code' : 'Codex';
+    out[id] = [...new Set([...(out[id] || []), label])];
+  }
+  return out;
+}
+
 const sha = (text) => crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
 // What "trust" is tied to: a skill's file contents, or an MCP server's config.
 const mcpFingerprint = (it) => sha(it.raw || JSON.stringify(it.config || {}));
@@ -308,4 +319,4 @@ function find(name, { agent, scope, kind, cwd = process.cwd() } = {}) {
   return inventory(cwd).filter((it) => it.name === name && (!agent || agent === 'both' || it.agent === agent) && (!scope || it.scope === scope) && (!kind || it.kind === kind));
 }
 
-module.exports = { inventory, audit, riskOf, applyTrust, trust, untrust, listTrusted, loadTrust, needsAttention, remove, restore, listQuarantine, find, cutCodexServer, codexServers, mcpPackage, LEVEL_RANK, QUARANTINE_DIR };
+module.exports = { installedCatalogIds, inventory, audit, riskOf, applyTrust, trust, untrust, listTrusted, loadTrust, needsAttention, remove, restore, listQuarantine, find, cutCodexServer, codexServers, mcpPackage, LEVEL_RANK, QUARANTINE_DIR };

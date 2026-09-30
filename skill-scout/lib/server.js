@@ -15,8 +15,8 @@ const installer = require('./install');
 
 const stripAnsi = (s) => String(s).replace(/\x1b\[[0-9;]*m/g, '');
 
-function rowJson(r) {
-  return { ...r.item, verdict: r.verdict, score: r.score, why: r.why, assessment: r.assessment };
+function rowJson(r, installed = {}) {
+  return { ...r.item, verdict: r.verdict, score: r.score, why: r.why, assessment: r.assessment, installedIn: installed[r.item.id] || [] };
 }
 
 async function handle(req, res, url, token) {
@@ -26,13 +26,17 @@ async function handle(req, res, url, token) {
   const target = ['claude', 'codex', 'both'].includes(q.for) ? q.for : 'both';
   const live = q.live === '1';
   switch (url.pathname) {
-    case '/api/top': return send(200, (await top({ type: q.type || undefined, target, live, limit: 50 })).map(rowJson));
+    case '/api/top': {
+      const installed = require('./manage').installedCatalogIds(process.cwd());
+      return send(200, (await top({ type: q.type || undefined, target, live, limit: 50 })).map((r) => rowJson(r, installed)));
+    }
     case '/api/recommend': {
       const dir = path.resolve(q.dir || process.cwd());
       const tags = q.describe ? tagsFromText(q.describe) : new Map();
       if (!q.describe || q.dir) for (const [t, why] of detectProject(dir)) if (!tags.has(t)) tags.set(t, why);
       const rows = await recommend(tags, { target, live, limit: 20 });
-      return send(200, { dir, detected: Object.fromEntries(tags), rows: rows.map(rowJson) });
+      const installed = require('./manage').installedCatalogIds(dir);
+      return send(200, { dir, detected: Object.fromEntries(tags), rows: rows.map((r) => rowJson(r, installed)) });
     }
     case '/api/search': {
       const local = catalog.search(q.q || '');
@@ -43,7 +47,7 @@ async function handle(req, res, url, token) {
       const item = catalog.get(q.id);
       if (!item) return send(404, { error: 'unknown id' });
       const a = await assess(item, { live: true });
-      return send(200, { ...item, assessment: a, verdict: verdict(item, a.level) });
+      return send(200, { ...item, assessment: a, verdict: verdict(item, a.level), installedIn: require('./manage').installedCatalogIds(q.dir ? path.resolve(q.dir) : process.cwd())[item.id] || [] });
     }
     case '/api/news': return send(200, require('./scan').latestReport());
     case '/api/scan': {

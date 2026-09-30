@@ -21,10 +21,15 @@ function run(cmd, args, dryRun, log) {
   if (dryRun) return true;
   // On Windows `claude`/`codex` are often .cmd shims that need a shell; cmd.exe
   // doesn't quote for us, so quote arguments with spaces ourselves.
+  // Output is captured (not inherited) so the dashboard can show it too.
   const win = process.platform === 'win32';
+  const opts = { encoding: 'utf8', windowsHide: true };
   const r = win
-    ? spawnSync([cmd, ...args].map((a) => (/[\s&|<>^]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' '), { stdio: 'inherit', shell: true })
-    : spawnSync(cmd, args, { stdio: 'inherit' });
+    ? spawnSync([cmd, ...args].map((a) => (/[\s&|<>^]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' '), { ...opts, shell: true })
+    : spawnSync(cmd, args, opts);
+  const out = `${r.stdout || ''}${r.stderr || ''}`.trim();
+  if (out) log(out);
+  if (r.error) log(`Error: ${r.error.message}`);
   return r.status === 0;
 }
 
@@ -176,6 +181,22 @@ async function installSkill({ repo, path: subpath, ref }, opts) {
   }
 }
 
+// Re-read the agents' config after installing and report where the item is.
+function verify(item, { target, cwd, log }) {
+  const inv = require('./manage').inventory(cwd);
+  const kind = item.type === 'mcp' ? 'mcp' : 'skill';
+  const names = kind === 'mcp' ? [item.id] : [path.basename((item.install && item.install.path) || item.id)];
+  const agents = target === 'both' ? ['claude', 'codex'] : [target];
+  let ok = true;
+  for (const agent of agents) {
+    const hit = inv.find((it) => it.agent === agent && it.kind === kind && names.includes(it.name));
+    const label = agent === 'claude' ? 'Claude Code' : 'Codex';
+    if (hit) log(c.green(`✓ Verified: ${hit.name} is now in ${label} (${hit.scope})`));
+    else { ok = false; log(c.red(`✗ Not found in ${label}'s configuration after installing – see the messages above`)); }
+  }
+  return ok;
+}
+
 // ------------------------------- Entry point --------------------------------
 async function install(item, opts) {
   const { target, log } = opts;
@@ -190,10 +211,11 @@ async function install(item, opts) {
       log(c.yellow(`\nThis server needs secrets. They are NOT stored in config files – ${win ? 'save them as Windows environment variables (then open a new terminal):' : 'add them to your shell profile (~/.zshrc or ~/.bashrc):'}`));
       for (const e of secrets) log(`  ${win ? `setx ${e.name} "..."` : `export ${e.name}="..."`}   ${c.dim((win ? 'REM ' : '# ') + e.description)}`);
     }
-    if (inst.transport === 'http' && !secrets.length) log(c.dim('Remote server: on first use you will be asked to sign in (OAuth). In Claude Code use /mcp; in Codex: codex mcp login ' + item.id));
+    if (inst.transport === 'http' && !secrets.length) log(c.dim('Remote server: if it asks you to sign in, use /mcp in Claude Code, or in Codex: codex mcp login ' + item.id));
   } else if (item.type === 'skill') {
     ok = await installSkill(inst, opts);
-  } else if (item.type === 'plugin') {
+  }
+  if (!opts.dryRun && (item.type === 'mcp' || item.type === 'skill')) ok = verify(item, opts) && ok; else if (item.type === 'plugin') {
     if (target !== 'codex' && inst.claude) {
       log(c.bold('\nClaude Code plugins are installed from inside Claude Code. Run these commands in a Claude Code session:'));
       inst.claude.forEach((cmd) => log('  ' + c.cyan(cmd)));

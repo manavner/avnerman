@@ -34,6 +34,10 @@
   .lv-high, .lv-blocked { background:var(--high); color:#fff; border:0; }
   .v-RECOMMENDED { color:var(--low); border-color:var(--low); } .v-AVOID { color:var(--high); border-color:var(--high); }
   .v-USE { color:var(--medium); border-color:var(--medium); }
+  .tag.installed { background:var(--accent2); color:#012; border:0; font-weight:600; }
+  .status { padding:10px 14px; border-radius:10px; margin:10px 0; font-weight:600; }
+  .status.ok { background:#2ecc7122; border:1px solid var(--low); } .status.bad { background:#ff4d4f22; border:1px solid var(--high); }
+  .status.info { background:#00c8ff18; border:1px solid var(--accent2); }
   .meter { height:6px; background:var(--line); border-radius:3px; overflow:hidden; } .meter i { display:block; height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); }
   .muted { color:var(--muted); font-size:15px; }
   .warn { color:var(--medium); }
@@ -110,7 +114,8 @@ function card(it) {
   el.className = 'card';
   el.innerHTML = `
     <div class="row"><span class="tag t-${it.type}">${it.type.toUpperCase()}</span><span class="tag lv-${lvl}">${lvl.toUpperCase()} RISK</span>
-      ${it.verdict ? `<span class="tag v-${it.verdict.split(' ')[0]}">${esc(it.verdict)}</span>` : ''}</div>
+      ${it.verdict ? `<span class="tag v-${it.verdict.split(' ')[0]}">${esc(it.verdict)}</span>` : ''}
+      ${(it.installedIn || []).length ? `<span class="tag installed">✓ Installed: ${esc(it.installedIn.join(' + '))}</span>` : ''}</div>
     <h3>${esc(it.name)}</h3>
     <div class="muted">${esc(it.publisher)}${it.official ? ' · official' : ' · community'}${a.popularity && a.popularity.stars ? ' · ★ ' + a.popularity.stars.toLocaleString() : ''}</div>
     <div>${esc(it.description)}</div>
@@ -141,25 +146,38 @@ async function openInfo(id) {
       ...a.vulns.map((v) => `<li class="warn">${esc(v.id)} ${esc(v.summary)} <a href="${esc(v.url)}" target="_blank" rel="noopener">link</a></li>`)])}
     <h4>User reports (GitHub issues mentioning security)</h4>${li(a.userWarnings.map((w) => `<li>${esc(w.date)} [${esc(w.state)}] <a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(w.title)}</a></li>`))}
     <h4>Install</h4>
+    ${(it.installedIn || []).length ? `<div class="status ok">✓ Already installed in ${esc(it.installedIn.join(' + '))}</div>` : ''}
     ${a.level === 'blocked' || it.deprecated ? '<div class="notice">Installation disabled: blocked or deprecated.</div>' : `
     <div class="bar">
       <select id="i-scope"><option value="user">All my projects</option><option value="project">Only this project folder</option></select>
       ${needs.map((e) => `<input type="text" data-var="${esc(e.name)}" placeholder="${esc(e.name)} – ${esc(e.description)}">`).join('')}
-      <label class="chk"><input type="checkbox" id="i-dry" checked> Dry run first</label>
       ${it.type !== 'mcp' ? '<label class="chk"><input type="checkbox" id="i-med"> Accept medium scan findings</label>' : ''}
-      <button class="btn primary" id="i-go">Install for ${esc($('#for').selectedOptions[0].text)}</button>
+    </div>
+    <div class="bar">
+      <button class="btn" id="i-preview">Preview (changes nothing)</button>
+      <button class="btn primary" id="i-go">Install now for ${esc($('#for').selectedOptions[0].text)}</button>
     </div>`}
+    <div id="i-status"></div>
     <pre id="i-log" hidden></pre>
     <div class="bar"><button class="btn" onclick="document.getElementById('dlg').close()">Close</button></div>`;
   const go = $('#i-go'); if (!go) return;
-  go.onclick = async () => {
-    const dry = $('#i-dry').checked;
+  const runInstall = async (dry) => {
     if (!dry && !confirm(`Install ${it.name}? Make sure you read the risks above.`)) return;
     const values = {}; d.querySelectorAll('[data-var]').forEach((i) => (values[i.dataset.var] = i.value));
-    const log = $('#i-log'); log.hidden = false; log.textContent = 'Working…';
+    const status = $('#i-status'); const log = $('#i-log');
+    status.innerHTML = `<div class="status info">${dry ? 'Previewing…' : 'Installing… (can take up to a minute)'}</div>`;
+    log.hidden = true; go.disabled = $('#i-preview').disabled = true;
     const r = await api('/api/install', {}, { id: it.id, for: $('#for').value, scope: $('#i-scope').value, dir: $('#dir').value, dryRun: dry, acceptMedium: !!($('#i-med') || {}).checked, values });
-    log.textContent = (r.logs || [r.error]).join('\n') + (r.ok ? `\n\n✓ ${dry ? 'Dry run OK – uncheck "Dry run" to install for real.' : 'Installed. Restart Claude Code / Codex.'}` : '\n\n✖ Not installed.');
+    go.disabled = $('#i-preview').disabled = false;
+    status.innerHTML = r.ok
+      ? `<div class="status ${dry ? 'info' : 'ok'}">${dry ? 'ℹ Preview only – nothing was changed. These are the steps "Install now" will run:' : '✓ Installed and verified. Restart Claude Code / Codex to use it.'}</div>`
+      : `<div class="status bad">✖ Not installed – see the details below.</div>`;
+    log.textContent = (r.logs || [r.error]).join('\n'); log.hidden = false;
+    status.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (r.ok && !dry) refresh();
   };
+  go.onclick = () => runInstall(false);
+  $('#i-preview').onclick = () => runInstall(true);
 }
 
 async function doRecommend() {

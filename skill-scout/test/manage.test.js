@@ -165,3 +165,18 @@ test('quarantine keeps trust, permanent delete and untrust drop it', () => {
   assert.strictEqual(manage.untrust(ev.key), true);
   assert.ok(!manage.listTrusted().some((t) => t.name === 'evil-skill'));
 });
+
+test('install verifies the result; a preview changes nothing', async () => {
+  const installer = require('../lib/install');
+  const catalog = require('../lib/catalog');
+  const before = fs.readFileSync(codexToml, 'utf8');
+  const logs = [];
+  const opts = { target: 'codex', scope: 'user', cwd: proj, values: {}, log: (m) => logs.push(String(m)), confirm: async () => true };
+  assert.strictEqual(await installer.install(catalog.get('context7'), { ...opts, dryRun: true }), true);
+  assert.strictEqual(fs.readFileSync(codexToml, 'utf8'), before, 'preview must not touch the config');
+  assert.ok(!logs.some((l) => l.includes('Verified')));
+  assert.strictEqual(await installer.install(catalog.get('context7'), opts), true);
+  assert.ok(logs.some((l) => /Verified: context7 is now in Codex/.test(l)), logs.join('\n'));
+  // Claude already had it under another name ('docs', same URL) – recognised as context7 too.
+  assert.deepStrictEqual(manage.installedCatalogIds(proj).context7, ['Claude Code', 'Codex']);
+});
