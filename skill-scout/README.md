@@ -32,6 +32,12 @@ skill-scout setup   # installs the "skill-advisor" skill into Claude Code + Code
 
 <div dir="rtl">
 
+**קיצור דרך בשולחן העבודה (Windows):** הרץ פעם אחת `skill-scout shortcut`. על שולחן העבודה יופיע אייקון **Skill Scout**, ולחיצה כפולה עליו פותחת את הדשבורד בדפדפן.
+- הדשבורד פועל כל עוד פתוח חלון ממוזער בשורת המשימות. סוגרים את החלון כדי לעצור אותו.
+- לחיצה כפולה נוספת כשהדשבורד כבר פתוח פשוט מציגה אותו שוב.
+- `skill-scout shortcut --start-menu` מוסיף את הקיצור גם לתפריט התחל, ו-`skill-scout shortcut --remove` מסיר אותו.
+- אם תזיז את התיקייה `skill-scout`, הרץ שוב את הפקודה.
+
 רשות: להגדלת מכסת הבקשות ל-GitHub, מגדירים טוקן (קריאה בלבד מספיקה): `export GITHUB_TOKEN=...`
 
 ## שימוש יומיומי
