@@ -48,6 +48,14 @@ test('audit finds every skill and MCP server with the right risk', () => {
   assert.strictEqual(rows[0].risk.level, 'blocked', 'riskiest first');
 });
 
+test('running from the home folder does not list everything twice', () => {
+  const rows = manage.inventory(home);
+  const keys = rows.map((r) => `${r.agent}:${r.kind}:${r.name}`);
+  assert.strictEqual(new Set(keys).size, keys.length, `duplicates: ${keys.join(', ')}`);
+  assert.strictEqual(rows.find((r) => r.name === 'evil-skill').scope, 'user');
+  assert.strictEqual(rows.find((r) => r.name === 'pg').scope, 'user');
+});
+
 test('quarantine + restore a Claude MCP server keeps the rest of ~/.claude.json', () => {
   const [it] = manage.find('postmark', { cwd: proj });
   const m = manage.remove(it, { cwd: proj });
