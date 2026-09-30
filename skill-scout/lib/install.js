@@ -210,23 +210,14 @@ async function install(item, opts) {
 }
 
 // ----------------------------- What's installed -----------------------------
-function readJson(p) { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } }
 
+// Names of installed items, grouped per agent (scope shown when not user-level).
 function listInstalled(cwd) {
   const out = { claudeMcp: [], codexMcp: [], claudeSkills: [], codexSkills: [] };
-  const userCfg = readJson(path.join(HOME, '.claude.json'));
-  if (userCfg && userCfg.mcpServers) out.claudeMcp.push(...Object.keys(userCfg.mcpServers).map((n) => `${n} (user)`));
-  const proj = userCfg && userCfg.projects && userCfg.projects[cwd];
-  if (proj && proj.mcpServers) out.claudeMcp.push(...Object.keys(proj.mcpServers).map((n) => `${n} (local)`));
-  const mcpJson = readJson(path.join(cwd, '.mcp.json'));
-  if (mcpJson && mcpJson.mcpServers) out.claudeMcp.push(...Object.keys(mcpJson.mcpServers).map((n) => `${n} (project)`));
-  for (const f of [path.join(CODEX_HOME, 'config.toml'), path.join(cwd, '.codex', 'config.toml')]) {
-    if (!exists(f)) continue;
-    out.codexMcp.push(...require('./manage').codexServers(fs.readFileSync(f, 'utf8')));
+  for (const it of require('./manage').inventory(cwd)) {
+    const key = `${it.agent}${it.kind === 'mcp' ? 'Mcp' : 'Skills'}`;
+    out[key].push(it.scope === 'user' ? it.name : `${it.name} (${it.scope})`);
   }
-  const ls = (d) => { try { return fs.readdirSync(d).filter((n) => exists(path.join(d, n, 'SKILL.md'))); } catch { return []; } };
-  out.claudeSkills.push(...ls(path.join(HOME, '.claude', 'skills')), ...ls(path.join(cwd, '.claude', 'skills')).map((n) => `${n} (project)`));
-  out.codexSkills.push(...ls(path.join(CODEX_HOME, 'skills')), ...ls(path.join(cwd, '.agents', 'skills')).map((n) => `${n} (project)`));
   return out;
 }
 

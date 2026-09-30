@@ -21,18 +21,25 @@ function writeJson(p, obj) {
 }
 
 // ------------------------------ config locations ------------------------------
+// Windows paths are case-insensitive.
+const norm = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+const samePath = (a, b) => norm(a) === norm(b);
+// When the working folder IS the home folder, "project" locations are the
+// user locations – list them once, as user scope.
+const dropProjectDupes = (list, key) => list.filter((x) => x.scope !== 'project' || !list.some((u) => u.scope === 'user' && u.agent === x.agent && samePath(u[key], x[key])));
+
 function skillBases(cwd) {
-  return [
+  return dropProjectDupes([
     { agent: 'claude', scope: 'user', dir: path.join(HOME, '.claude', 'skills') },
     { agent: 'claude', scope: 'project', dir: path.join(cwd, '.claude', 'skills') },
     { agent: 'codex', scope: 'user', dir: path.join(CODEX_HOME(), 'skills') },
     { agent: 'codex', scope: 'project', dir: path.join(cwd, '.agents', 'skills') },
-  ];
+  ], 'dir');
 }
-const codexConfigs = (cwd) => [
-  { scope: 'user', file: path.join(CODEX_HOME(), 'config.toml') },
-  { scope: 'project', file: path.join(cwd, '.codex', 'config.toml') },
-];
+const codexConfigs = (cwd) => dropProjectDupes([
+  { agent: 'codex', scope: 'user', file: path.join(CODEX_HOME(), 'config.toml') },
+  { agent: 'codex', scope: 'project', file: path.join(cwd, '.codex', 'config.toml') },
+], 'file');
 const claudeUserFile = () => path.join(HOME, '.claude.json');
 
 // ----------------------------------- TOML -----------------------------------
@@ -90,7 +97,7 @@ function inventory(cwd = process.cwd()) {
   };
   if (user) {
     addClaude(user.mcpServers, 'user', claudeUserFile());
-    const projKey = user.projects && Object.keys(user.projects).find((k) => path.resolve(k) === path.resolve(cwd));
+    const projKey = user.projects && Object.keys(user.projects).find((k) => samePath(k, cwd));
     if (projKey) addClaude(user.projects[projKey].mcpServers, 'local', claudeUserFile(), projKey);
   }
   const mcpJson = readJson(path.join(cwd, '.mcp.json'));
@@ -175,7 +182,7 @@ function moveDir(from, to) {
 // Only ever delete a direct child of a known skills folder.
 function assertSkillPath(it, cwd) {
   const parent = path.resolve(path.dirname(it.path));
-  const ok = skillBases(cwd).some((b) => path.resolve(b.dir) === parent) && path.basename(it.path) === it.name && !/[\\/]/.test(it.name);
+  const ok = skillBases(cwd).some((b) => samePath(b.dir, parent)) && path.basename(it.path) === it.name && !/[\\/]/.test(it.name);
   if (!ok) throw new Error(`Refusing to touch unexpected path ${it.path}`);
 }
 
