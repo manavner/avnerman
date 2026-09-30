@@ -9,6 +9,11 @@ function blocklisted(ecosystem, name) {
   return catalog.blocklist.find((b) => b.ecosystem === ecosystem && b.name === name) || null;
 }
 
+// Servers that ship with an agent itself (not third-party).
+function builtin(agent, name) {
+  return (catalog.builtins || []).find((b) => b.agent === agent && b.name === name) || null;
+}
+
 function globalWarningsFor(ecosystem, name) {
   return catalog.globalWarnings.filter((w) => w.ecosystem === ecosystem && w.match === name);
 }
@@ -27,4 +32,4 @@ function search(query) {
     .map((r) => r.item);
 }
 
-module.exports = { all, get, search, blocklisted, globalWarningsFor, meta: { version: catalog.version, updated: catalog.updated } };
+module.exports = { all, get, search, blocklisted, builtin, globalWarningsFor, meta: { version: catalog.version, updated: catalog.updated } };

@@ -66,12 +66,16 @@ skill-scout audit --fix                # go over HIGH-risk items one by one: [q]
 skill-scout remove last30days          # quarantine one item (asks first)
 skill-scout remove last30days --delete # delete permanently
 skill-scout remove github --for codex  # only the Codex copy
+skill-scout trust graphify --note "defensive code"   # reviewed → stop warning (until it changes)
+skill-scout trusted                    # list trusted items
+skill-scout untrust graphify           # warn about it again
 skill-scout quarantine                 # what is in quarantine
 skill-scout restore last30days         # put it back
 ```
 
 <div dir="rtl">
 
+* **אמון (Trust):** אחרי שבדקת פריט והחלטת שהוא בסדר (למשל graphify, שההתראות עליו הן קוד הגנה), סמן אותו כ"נבדק". מאותו רגע הוא לא יופיע כ-HIGH ולא יתריע בסריקה השבועית. **האמון קשור לתוכן המדויק:** אם הקבצים של ה-Skill או ההגדרות של השרת ישתנו, למשל בעדכון זדוני, ההתראה תחזור מיד עם ההערה "CHANGED since you trusted it".
 * **הסגר (ברירת המחדל):** הפריט עובר לתיקייה `%USERPROFILE%\.skill-scout\quarantine\`, ואפשר להחזיר אותו בפקודה אחת. זו הדרך הבטוחה.
 * **מחיקה (`--delete`):** מחיקה לצמיתות.
 * **מה נתמך:** Skills ושרתי MCP ב-Claude Code (ברמת המשתמש, הפרויקט וה-local) וב-Codex (ברמת המשתמש והפרויקט). שאר ההגדרות בקבצי הקונפיגורציה לא משתנות, ולפני כל שינוי נשמר גיבוי.

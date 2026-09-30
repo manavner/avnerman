@@ -119,3 +119,49 @@ test('package detection for npx / uvx launch commands', () => {
   assert.strictEqual(manage.mcpPackage({ command: 'uvx', args: ['--from', 'git+https://github.com/x/y', 'y'] }).ecosystem, 'git');
   assert.strictEqual(manage.mcpPackage({ command: 'node', args: ['server.js'] }), null);
 });
+
+test('node_repl is recognised as part of Codex, not UNKNOWN', () => {
+  fs.appendFileSync(codexToml, '\n[mcp_servers.node_repl]\ncommand = \'C:\\Program Files\\Codex\\node.exe\'\nargs = ["repl.js"]\n\n[mcp_servers.node_repl.env]\nX = "1"\n');
+  const r = byName(manage.audit(proj), 'node_repl');
+  assert.strictEqual(r.risk.level, 'low');
+  assert.strictEqual(r.risk.source, 'builtin');
+  assert.strictEqual(r.config.command, 'C:\\Program Files\\Codex\\node.exe', 'single-quoted TOML strings are parsed');
+});
+
+test('trusting a HIGH skill silences it until its files change', () => {
+  const [it] = manage.find('evil-skill', { cwd: proj });
+  manage.trust(it, 'reviewed');
+  let rows = manage.audit(proj);
+  let r = byName(rows, 'evil-skill');
+  assert.ok(r.risk.trusted);
+  assert.strictEqual(r.risk.level, 'high', 'the real level is kept');
+  assert.strictEqual(manage.needsAttention(r.risk), false);
+  assert.strictEqual(rows[rows.length - 1].name, 'evil-skill', 'trusted items sort last');
+  fs.appendFileSync(path.join(it.path, 'SKILL.md'), '\nsneaky new line\n');
+  r = byName(manage.audit(proj), 'evil-skill');
+  assert.ok(!r.risk.trusted);
+  assert.ok(r.risk.trustBroken);
+  assert.match(r.risk.reasons[0], /CHANGED since you trusted it/);
+  assert.strictEqual(manage.needsAttention(r.risk), true);
+});
+
+test('trusting an MCP server is tied to its config', () => {
+  manage.trust(manage.find('gh', { agent: 'codex', cwd: proj })[0]);
+  assert.ok(byName(manage.audit(proj), 'gh').risk.trusted);
+  fs.writeFileSync(codexToml, fs.readFileSync(codexToml, 'utf8').replace('https://api.githubcopilot.com/mcp/', 'https://evil.example/mcp'));
+  assert.ok(byName(manage.audit(proj), 'gh').risk.trustBroken);
+});
+
+test('quarantine keeps trust, permanent delete and untrust drop it', () => {
+  const [pw] = manage.find('pw', { cwd: proj });
+  manage.trust(pw);
+  const m = manage.remove(pw, { cwd: proj });
+  assert.ok(manage.listTrusted().some((t) => t.name === 'pw'));
+  manage.restore(m.id);
+  assert.ok(byName(manage.audit(proj), 'pw').risk.trusted, 'restored item is still trusted');
+  manage.remove(manage.find('pw', { cwd: proj })[0], { permanent: true, cwd: proj });
+  assert.ok(!manage.listTrusted().some((t) => t.name === 'pw'));
+  const [ev] = manage.find('evil-skill', { cwd: proj });
+  assert.strictEqual(manage.untrust(ev.key), true);
+  assert.ok(!manage.listTrusted().some((t) => t.name === 'evil-skill'));
+});

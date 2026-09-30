@@ -117,6 +117,7 @@ async function runScan({ minStars = 20, log = () => {} } = {}) {
 
   // 4. Installed skills: re-scan locally. Alert the first time a skill is HIGH,
   //    when its files change, or when its risk goes up – not every week.
+  const trustedHashes = new Set(require('./manage').listTrusted().filter((t) => t.kind === 'skill').map((t) => t.fingerprint));
   for (const base of skillDirs('both', 'user', process.cwd())) {
     let dirs = [];
     try { dirs = fs.readdirSync(base); } catch { continue; }
@@ -128,6 +129,7 @@ async function runScan({ minStars = 20, log = () => {} } = {}) {
       const before = prev && prev.skills && prev.skills[dir];
       const changed = !!before && before.hash !== res.hash;
       const escalated = !!before && LEVEL_ORDER[res.level] > LEVEL_ORDER[before.level];
+      if (trustedHashes.has(res.hash) && !changed) continue; // reviewed and unchanged
       if (changed || escalated || (!before && res.level === 'high')) {
         const top = res.summary.filter((g) => g.severity === 'high').slice(0, 4)
           .map((g) => `${g.msg} (${g.count}x, e.g. ${g.examples[0].file}:${g.examples[0].line})`);
