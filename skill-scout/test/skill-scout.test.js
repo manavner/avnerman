@@ -120,3 +120,15 @@ test('codex TOML never contains secret values', () => {
   assert.match(fc, /env_vars = \["FIRECRAWL_API_KEY"\]/);
   assert.throws(() => codexTomlBlock(catalog.get('filesystem'), {}), /ALLOWED_DIR/);
 });
+
+test('desktop shortcut script: quoting, icon, remove and Start menu', () => {
+  const { buildScript } = require('../lib/shortcut');
+  const make = buildScript({ nodePath: 'C:\\Program Files\\nodejs\\node.exe', script: "D:\\Avner Man Software\\O'Neil\\bin\\skill-scout.js", workDir: 'C:\\Users\\AVNER', icon: 'D:\\x\\skill-scout.ico' });
+  assert.match(make, /\$s\.TargetPath = 'C:\\Program Files\\nodejs\\node\.exe'/);
+  assert.ok(make.includes(`$s.Arguments = '"D:\\Avner Man Software\\O''Neil\\bin\\skill-scout.js" ui'`), 'apostrophes doubled, path quoted');
+  assert.ok(make.includes("$s.IconLocation = 'D:\\x\\skill-scout.ico,0'"));
+  assert.ok(make.includes("GetFolderPath('Desktop')") && !make.includes("'Programs'"));
+  assert.ok(buildScript({ startMenu: true }).includes("GetFolderPath('Programs')"));
+  const rm = buildScript({ remove: true });
+  assert.ok(rm.includes('Remove-Item') && !rm.includes('CreateShortcut'));
+});

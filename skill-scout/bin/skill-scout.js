@@ -30,6 +30,7 @@ ${c.bold('Usage')}
   skill-scout restore <id|name>                       Put a quarantined item back
   skill-scout ui [--port 4477]                        Open the web dashboard
   skill-scout setup                                   Install the "skill-advisor" skill into Claude Code & Codex
+  skill-scout shortcut [--start-menu] [--remove]      Desktop icon that opens the dashboard (Windows)
   skill-scout scan [--notify]                         Look for NEW skills/MCP servers + new security alerts since last scan
   skill-scout news                                    Show the latest scan report
   skill-scout schedule [--day SUN] [--time 10:00]     Run the scan automatically every week (Windows Task Scheduler)
@@ -51,7 +52,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (!a.startsWith('--')) { opts._.push(a); continue; }
     const key = a.slice(2);
-    if (['live', 'json', 'dry-run', 'yes', 'force', 'offline', 'no-open', 'scan', 'help', 'notify', 'remove', 'status', 'fix', 'delete'].includes(key)) { opts[key] = true; continue; }
+    if (['live', 'json', 'dry-run', 'yes', 'force', 'offline', 'no-open', 'scan', 'help', 'notify', 'remove', 'status', 'fix', 'delete', 'start-menu'].includes(key)) { opts[key] = true; continue; }
     const val = argv[++i];
     if (key === 'set') { const [k, ...v] = (val || '').split('='); opts.set[k] = v.join('='); } else opts[key] = val;
   }
@@ -432,6 +433,16 @@ function cmdNews(o) {
   printReport(r);
 }
 
+function cmdShortcut(o) {
+  const sc = require('../lib/shortcut');
+  const opts = { remove: !!o.remove, startMenu: !!o['start-menu'] };
+  if (o['dry-run']) return console.log(sc.buildScript(opts));
+  const r = sc.run(opts);
+  console.log(r.output);
+  if (!r.ok) { process.exitCode = 1; return; }
+  if (!o.remove) console.log(c.green(`\n✓ Double-click "${sc.NAME}" on your desktop to open the dashboard.`) + c.dim('\n  A minimised window keeps it running – close that window to stop the dashboard.'));
+}
+
 function cmdSchedule(o) {
   const sch = require('../lib/schedule');
   if (o.remove) return sch.remove();
@@ -443,7 +454,7 @@ function cmdSchedule(o) {
 async function main() {
   const o = parseArgs(process.argv.slice(2));
   const cmd = o._[0];
-  const table = { top: cmdTop, recommend: cmdRecommend, rec: cmdRecommend, search: cmdSearch, info: cmdInfo, check: cmdCheck, install: cmdInstall, installed: cmdAudit, audit: cmdAudit, remove: cmdRemove, uninstall: cmdRemove, quarantine: cmdQuarantine, restore: cmdRestore, trust: cmdTrust, untrust: cmdUntrust, trusted: cmdTrusted, setup: cmdSetup, scan: cmdScan, news: cmdNews, schedule: cmdSchedule, ui: (x) => require('../lib/server').start(x) };
+  const table = { top: cmdTop, recommend: cmdRecommend, rec: cmdRecommend, search: cmdSearch, info: cmdInfo, check: cmdCheck, install: cmdInstall, installed: cmdAudit, audit: cmdAudit, remove: cmdRemove, uninstall: cmdRemove, quarantine: cmdQuarantine, restore: cmdRestore, trust: cmdTrust, untrust: cmdUntrust, trusted: cmdTrusted, setup: cmdSetup, scan: cmdScan, news: cmdNews, schedule: cmdSchedule, shortcut: cmdShortcut, ui: (x) => require('../lib/server').start(x) };
   if (!cmd || cmd === 'help' || o.help) return console.log(HELP);
   if (!table[cmd]) throw new Error(`Unknown command "${cmd}". Run: skill-scout help`);
   await table[cmd](o);

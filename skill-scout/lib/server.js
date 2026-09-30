@@ -98,17 +98,34 @@ function start(o = {}) {
     const host = (req.headers.host || '').split(':')[0];
     if (!['127.0.0.1', 'localhost'].includes(host)) { res.writeHead(403); return res.end(); }
     const url = new URL(req.url, `http://${req.headers.host}`);
+    if (url.pathname === '/favicon.ico') {
+      res.writeHead(200, { 'content-type': 'image/x-icon', 'cache-control': 'max-age=86400' });
+      return res.end(fs.readFileSync(path.join(__dirname, '..', 'ui', 'skill-scout.ico')));
+    }
     if (url.pathname === '/') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline'" });
       return res.end(page.replace('__TOKEN__', token).replace('__CWD__', JSON.stringify(process.cwd()).slice(1, -1)));
     }
     try { await handle(req, res, url, token); } catch (e) { res.writeHead(500); res.end(JSON.stringify({ error: e.message })); }
   });
-  server.listen(port, '127.0.0.1', () => {
-    const link = `http://127.0.0.1:${port}/`;
-    console.log(`skill-scout dashboard: ${link}  (Ctrl+C to stop)`);
+  const link = `http://127.0.0.1:${port}/`;
+  const openBrowser = () => {
+    if (o['no-open']) return;
     const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
-    if (!o['no-open']) try { spawn(opener, [link], { stdio: 'ignore', detached: true }).on('error', () => {}).unref(); } catch { /* no browser */ }
+    try { spawn(opener, [link], { stdio: 'ignore', detached: true }).on('error', () => {}).unref(); } catch { /* no browser */ }
+  };
+  server.on('error', (e) => {
+    // Already running (e.g. the desktop shortcut was clicked twice): just show it.
+    if (e.code === 'EADDRINUSE') {
+      console.log(`The dashboard is already running at ${link} – opening it.`);
+      openBrowser();
+      return;
+    }
+    throw e;
+  });
+  server.listen(port, '127.0.0.1', () => {
+    console.log(`skill-scout dashboard: ${link}  (close this window or press Ctrl+C to stop)`);
+    openBrowser();
   });
   return server;
 }
