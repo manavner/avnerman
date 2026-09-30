@@ -80,14 +80,15 @@ async function handle(req, res, url, token) {
       const a = await assess(item, { live: true });
       if (a.level === 'blocked' || item.deprecated) return send(400, { error: 'This item is blocked or deprecated.' });
       const logs = [];
-      const opts = {
+      const result = {};
+      const opts = { result,
         target: ['claude', 'codex', 'both'].includes(body.for) ? body.for : 'both', scope: body.scope === 'project' ? 'project' : 'user',
         dryRun: !!body.dryRun, values: body.values || {}, cwd: body.dir ? path.resolve(body.dir) : process.cwd(),
         log: (m) => logs.push(stripAnsi(m)), confirm: async () => !!body.acceptMedium,
       };
       let ok = false;
       try { ok = await installer.install(item, opts); } catch (e) { logs.push('Error: ' + e.message); }
-      return send(200, { ok, logs });
+      return send(200, { ok, logs, ...result });
     }
     default: return send(404, { error: 'not found' });
   }

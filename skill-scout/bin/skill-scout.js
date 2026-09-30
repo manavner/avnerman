@@ -239,7 +239,7 @@ async function cmdInstall(o) {
   const id = o._[1];
   if (!id) throw new Error('Usage: skill-scout install <id | github:owner/repo/path>');
   const opts = {
-    target: o.target, scope: o.scope, dryRun: o['dry-run'], values: o.set, cwd: process.cwd(), force: o.force,
+    result: {}, target: o.target, scope: o.scope, dryRun: o['dry-run'], values: o.set, cwd: process.cwd(), force: o.force,
     log: console.log, confirm: o.yes ? async () => true : ask,
   };
   if (id.startsWith('github:')) {
@@ -263,12 +263,14 @@ async function cmdInstall(o) {
 }
 
 function finish(ok, opts) {
-  console.log(ok ? c.green(`\n✓ Done${opts.dryRun ? ' (dry run – nothing changed)' : ''}. Restart Claude Code / Codex to load it.`) : c.red('\n✖ Not installed.'));
+  const partial = opts.result && opts.result.partial;
+  console.log(ok ? c.green(`\n✓ Done${opts.dryRun ? ' (dry run – nothing changed)' : ''}. Restart Claude Code / Codex to load it.`)
+    : partial ? c.yellow('\n⚠ Partly installed – the ✓ lines above are installed, the ✗ lines are not.') : c.red('\n✖ Not installed.'));
   if (!ok) process.exitCode = 1;
 }
 
 const riskBadge = (lvl) => (lvl === 'unknown' ? c.magenta('UNKNOWN') : levelBadge(lvl));
-const where = (it) => `${it.agent === 'claude' ? 'Claude Code' : 'Codex'} ${it.kind === 'mcp' ? 'MCP' : 'skill'}, ${it.scope}`;
+const where = (it) => `${it.agent === 'claude' ? 'Claude Code' : 'Codex'} ${{ mcp: 'MCP', skill: 'skill', plugin: 'plugin' }[it.kind]}, ${it.scope}`;
 
 function printAuditRow(it, i) {
   const r = it.risk;
@@ -286,7 +288,6 @@ async function cmdAudit(o) {
   if (!rows.length) return console.log('Nothing installed (skills or MCP servers) was found.');
   console.log(c.bold(`\nInstalled skills & MCP servers (${rows.length}) – riskiest first\n`));
   rows.forEach(printAuditRow);
-  console.log(c.dim('\n(Claude Code plugins are managed inside Claude Code with /plugin.)'));
   const risky = rows.filter((r) => manage.needsAttention(r.risk));
   if (!o.fix) {
     if (risky.length) console.log(c.yellow(`\n${risky.length} HIGH-risk item(s). Review them with: skill-scout audit --fix`));
@@ -306,6 +307,7 @@ async function cmdAudit(o) {
 function removeOne(it, { permanent, reason }) {
   const manage = require('../lib/manage');
   const m = manage.remove(it, { permanent, reason, cwd: process.cwd() });
+  if (m.uninstalled) return console.log(c.green(`  ✓ Uninstalled plugin ${it.name} (reinstall it from the catalog or with /plugin)`));
   console.log(permanent ? c.red(`  ✓ Deleted ${it.name}`) : c.green(`  ✓ Quarantined ${it.name}. Undo with: skill-scout restore ${m.id}`));
 }
 

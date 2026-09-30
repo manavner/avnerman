@@ -171,7 +171,11 @@ async function openInfo(id) {
     go.disabled = $('#i-preview').disabled = false;
     status.innerHTML = r.ok
       ? `<div class="status ${dry ? 'info' : 'ok'}">${dry ? 'ℹ Preview only – nothing was changed. These are the steps "Install now" will run:' : '✓ Installed and verified. Restart Claude Code / Codex to use it.'}</div>`
-      : `<div class="status bad">✖ Not installed – see the details below.</div>`;
+      : r.partial && !r.needsAcceptMedium
+        ? `<div class="status bad">⚠ Partly installed – the ✓ lines below are installed, the ✗ lines are not.</div>`
+      : r.needsAcceptMedium
+        ? `<div class="status bad">⚠ ${r.partial ? 'Partly installed – ' : ''}Stopped at MEDIUM-risk scan findings (listed below). If they look acceptable, tick <b>Accept medium scan findings</b> and press <b>Install now</b> again.</div>`
+        : `<div class="status bad">✖ Not installed – see the details below.</div>`;
     log.textContent = (r.logs || [r.error]).join('\n'); log.hidden = false;
     status.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (r.ok && !dry) refresh();
@@ -196,7 +200,7 @@ async function doSearch() {
 async function doInstalled() {
   const dir = $('#dir').value;
   const [rows, quar] = await Promise.all([api('/api/audit', { dir }), api('/api/quarantine')]);
-  const who = (it) => `${it.agent === 'claude' ? 'Claude Code' : 'Codex'} ${it.kind === 'mcp' ? 'MCP' : 'skill'} · ${it.scope}`;
+  const who = (it) => `${it.agent === 'claude' ? 'Claude Code' : 'Codex'} ${{ mcp: 'MCP', skill: 'skill', plugin: 'plugin' }[it.kind]} · ${it.scope}`;
   const risky = rows.filter((r) => !r.risk.trusted && ['blocked', 'high'].includes(r.risk.level)).length;
   const row = (it) => `<div class="card" style="cursor:default">
       <div class="row">${it.risk.trusted ? `<span class="tag lv-low">TRUSTED</span><span class="tag">was ${esc(it.risk.level)}</span>` : `<span class="tag lv-${it.risk.level === 'unknown' ? 'medium' : it.risk.level}">${esc(it.risk.level.toUpperCase())}</span>`}<span class="tag">${esc(who(it))}</span>
@@ -207,7 +211,7 @@ async function doInstalled() {
       <div class="row">${it.risk.trusted ? `<button class="btn" data-u="${esc(it.key)}">Untrust</button>` : it.risk.level !== 'low' ? `<button class="btn" data-t="${esc(it.key)}">Trust</button>` : ''}<button class="btn" data-q="${esc(it.key)}">Quarantine</button><button class="btn" data-d="${esc(it.key)}" style="border-color:var(--high);color:var(--high)">Delete</button></div>
     </div>`;
   $('#installed-list').innerHTML =
-    `<div class="notice">${rows.length} installed · <b>${risky}</b> HIGH-risk. <b>Trust</b> = you reviewed it (warns again if it changes). <b>Quarantine</b> moves an item to a safe folder – you can restore it later. <b>Delete</b> is permanent. Restart Claude Code / Codex afterwards. (Plugins: use /plugin inside Claude Code.)</div>
+    `<div class="notice">${rows.length} installed · <b>${risky}</b> HIGH-risk. <b>Trust</b> = you reviewed it (warns again if it changes). <b>Quarantine</b> moves an item to a safe folder – you can restore it later. <b>Delete</b> is permanent. For plugins, both buttons uninstall. Restart Claude Code / Codex afterwards.</div>
      <div class="grid">${rows.map(row).join('') || '<div class="muted">Nothing installed.</div>'}</div>
      <h3>Quarantine</h3>${quar.length ? `<ul>${quar.map((m) => `<li><b>${esc(m.name)}</b> <span class="muted">${esc(m.agent)} ${esc(m.kind)} · ${esc(m.scope)} · ${esc(m.removedAt.slice(0, 16).replace('T', ' '))}</span> <button class="btn" data-r="${esc(m.id)}">Restore</button></li>`).join('')}</ul>` : '<div class="muted">Empty.</div>'}`;
   const act = async (path, body, msg) => { if (!confirm(msg)) return; const r = await api(path, {}, body); if (r.error) alert(r.error); doInstalled(); };
