@@ -7,6 +7,7 @@
 // `--delete` removes permanently.
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const catalog = require('./catalog');
 const { scanSkillDir } = require('./security');
 const { HOME, DATA_DIR, exists } = require('./util');
@@ -74,7 +75,7 @@ function cutCodexServer(text, name) {
 }
 
 function parseCodexBlock(block) {
-  const str = (key) => { const m = block.match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"`, 'm')); return m && m[1]; };
+  const str = (key) => { const m = block.match(new RegExp(`^\\s*${key}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'm')); return m && (m[1] ?? m[2]); };
   const argsM = block.match(/^\s*args\s*=\s*\[([^\]]*)\]/m);
   const args = argsM ? [...argsM[1].matchAll(/"([^"]*)"|'([^']*)'/g)].map((m) => m[1] ?? m[2]) : [];
   return { command: str('command'), args, url: str('url') };
@@ -106,7 +107,8 @@ function inventory(cwd = process.cwd()) {
     if (!exists(cf.file)) continue;
     const text = fs.readFileSync(cf.file, 'utf8');
     for (const n of codexServers(text)) {
-      items.push({ kind: 'mcp', agent: 'codex', scope: cf.scope, name: n, file: cf.file, config: parseCodexBlock(cutCodexServer(text, n).block) });
+      const { block } = cutCodexServer(text, n);
+      items.push({ kind: 'mcp', agent: 'codex', scope: cf.scope, name: n, file: cf.file, config: parseCodexBlock(block), raw: block });
     }
   }
   return items.map((it) => ({ ...it, key: `${it.agent}:${it.kind}:${it.scope}:${it.name}` }));
@@ -136,12 +138,22 @@ function catalogMatch(it) {
   )) || null;
 }
 
+const sha = (text) => crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
+// What "trust" is tied to: a skill's file contents, or an MCP server's config.
+const mcpFingerprint = (it) => sha(it.raw || JSON.stringify(it.config || {}));
+
 function riskOf(it) {
   if (it.kind === 'skill') {
     const scan = scanSkillDir(it.path);
     const top = scan.summary.filter((g) => g.severity !== 'low').slice(0, 3).map((g) => `${g.msg} (${g.count}x, e.g. ${g.examples[0].file}:${g.examples[0].line})`);
-    return { level: scan.level, reasons: top.length ? top : ['No suspicious patterns'], source: 'scan' };
+    return { level: scan.level, reasons: top.length ? top : ['No suspicious patterns'], source: 'scan', fingerprint: scan.hash };
   }
+  return { ...mcpRisk(it), fingerprint: mcpFingerprint(it) };
+}
+
+function mcpRisk(it) {
+  const builtin = catalog.builtin(it.agent, it.name);
+  if (builtin) return { level: 'low', reasons: [builtin.description], source: 'builtin' };
   const cfg = it.config || {};
   const pkg = mcpPackage(cfg);
   if (pkg) {
@@ -162,11 +174,51 @@ function riskOf(it) {
   return { level: 'unknown', reasons: [`Not in the vetted catalog (${what})${hint}`], source: 'none' };
 }
 
+// ---------------------------------- trust ----------------------------------
+// "I reviewed this, stop warning me" – valid only while the contents stay the
+// same. Any change to the files/config brings the warning back.
+const TRUST_FILE = path.join(DATA_DIR, 'trusted.json');
+const loadTrust = () => readJson(TRUST_FILE) || {};
+function saveTrust(t) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(TRUST_FILE, JSON.stringify(t, null, 2));
+}
+
+function trust(it, note = '') {
+  const risk = it.risk || riskOf(it);
+  const t = loadTrust();
+  t[it.key] = { name: it.name, agent: it.agent, kind: it.kind, scope: it.scope, fingerprint: risk.fingerprint, level: risk.level, trustedAt: new Date().toISOString(), note };
+  saveTrust(t);
+  return t[it.key];
+}
+
+function untrust(key) {
+  const t = loadTrust();
+  const had = !!t[key];
+  delete t[key];
+  saveTrust(t);
+  return had;
+}
+
+const listTrusted = () => Object.entries(loadTrust()).map(([key, v]) => ({ key, ...v }));
+
+// Adds risk.trusted (still valid) or risk.trustBroken (contents changed).
+function applyTrust(it, risk, trusted = loadTrust()) {
+  const t = trusted[it.key];
+  if (!t) return risk;
+  if (t.fingerprint === risk.fingerprint) return { ...risk, trusted: { at: t.trustedAt, note: t.note } };
+  return { ...risk, trustBroken: true, reasons: [`CHANGED since you trusted it on ${t.trustedAt.slice(0, 10)} – review again`, ...risk.reasons] };
+}
+
+// Sort order: trusted items go to the bottom.
 const LEVEL_RANK = { blocked: 4, high: 3, unknown: 2, medium: 1, low: 0 };
+const rank = (r) => (r.trusted ? -1 : LEVEL_RANK[r.level]);
+const needsAttention = (r) => !r.trusted && ['blocked', 'high'].includes(r.level);
 
 function audit(cwd = process.cwd()) {
-  return inventory(cwd).map((it) => ({ ...it, risk: riskOf(it) }))
-    .sort((a, b) => LEVEL_RANK[b.risk.level] - LEVEL_RANK[a.risk.level] || a.name.localeCompare(b.name));
+  const trusted = loadTrust();
+  return inventory(cwd).map((it) => ({ ...it, risk: applyTrust(it, riskOf(it), trusted) }))
+    .sort((a, b) => rank(b.risk) - rank(a.risk) || a.name.localeCompare(b.name));
 }
 
 // ------------------------------ remove / restore ------------------------------
@@ -214,7 +266,8 @@ function remove(it, { permanent = false, reason = '', cwd = process.cwd() } = {}
   } else {
     Object.assign(manifest, { file: it.file, projectKey: it.projectKey }, removeMcpConfig(it));
   }
-  if (permanent) return { permanent: true, ...manifest };
+  // Quarantine keeps the trust entry (a restored item is unchanged); delete drops it.
+  if (permanent) { untrust(it.key); return { permanent: true, ...manifest }; }
   fs.mkdirSync(qdir, { recursive: true });
   fs.writeFileSync(path.join(qdir, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;
@@ -255,4 +308,4 @@ function find(name, { agent, scope, kind, cwd = process.cwd() } = {}) {
   return inventory(cwd).filter((it) => it.name === name && (!agent || agent === 'both' || it.agent === agent) && (!scope || it.scope === scope) && (!kind || it.kind === kind));
 }
 
-module.exports = { inventory, audit, riskOf, remove, restore, listQuarantine, find, cutCodexServer, codexServers, mcpPackage, LEVEL_RANK, QUARANTINE_DIR };
+module.exports = { inventory, audit, riskOf, applyTrust, trust, untrust, listTrusted, loadTrust, needsAttention, remove, restore, listQuarantine, find, cutCodexServer, codexServers, mcpPackage, LEVEL_RANK, QUARANTINE_DIR };

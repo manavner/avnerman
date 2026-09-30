@@ -22,8 +22,10 @@ ${c.bold('Usage')}
                                                       Security audit (vulnerabilities, user warnings, skill scan)
   skill-scout install <id | github:owner/repo/path>   Install after showing risks and asking you
   skill-scout installed                               Everything installed (Claude Code + Codex) with its risk level
-  skill-scout audit [--fix]                           Same, and --fix offers to quarantine/delete HIGH-risk items one by one
+  skill-scout audit [--fix]                           Same, and --fix offers to trust/quarantine/delete HIGH-risk items one by one
   skill-scout remove <name> [--delete]                Remove a skill or MCP server (default: quarantine, can be restored)
+  skill-scout trust <name> [--note "why"]             Mark a reviewed item as trusted (warns again if it changes)
+  skill-scout untrust <name> | trusted                Undo trust / list trusted items
   skill-scout quarantine                              List quarantined items
   skill-scout restore <id|name>                       Put a quarantined item back
   skill-scout ui [--port 4477]                        Open the web dashboard
@@ -268,9 +270,12 @@ const riskBadge = (lvl) => (lvl === 'unknown' ? c.magenta('UNKNOWN') : levelBadg
 const where = (it) => `${it.agent === 'claude' ? 'Claude Code' : 'Codex'} ${it.kind === 'mcp' ? 'MCP' : 'skill'}, ${it.scope}`;
 
 function printAuditRow(it, i) {
-  const note = it.risk.official && it.risk.level === 'high' ? c.cyan('  official – powerful by design, keep it if you use it') : '';
-  console.log(`${String(i + 1).padStart(2)}. ${riskBadge(it.risk.level).padEnd(8)} ${c.bold(it.name)}  ${c.dim(where(it))}${note}`);
-  it.risk.reasons.forEach((r) => console.log(c.dim(`       • ${r}`)));
+  const r = it.risk;
+  const badge = r.trusted ? c.green(`TRUSTED`) + c.dim(` (${r.level})`) : riskBadge(r.level);
+  const note = r.trusted ? c.dim(`  reviewed ${r.trusted.at.slice(0, 10)}${r.trusted.note ? ': ' + r.trusted.note : ''}`)
+    : r.official && r.level === 'high' ? c.cyan('  official – powerful by design, keep it if you use it') : '';
+  console.log(`${String(i + 1).padStart(2)}. ${badge} ${c.bold(it.name)}  ${c.dim(where(it))}${note}`);
+  if (!r.trusted) r.reasons.forEach((x) => console.log((r.trustBroken && x === r.reasons[0] ? c.yellow : c.dim)(`       • ${x}`)));
 }
 
 async function cmdAudit(o) {
@@ -281,16 +286,17 @@ async function cmdAudit(o) {
   console.log(c.bold(`\nInstalled skills & MCP servers (${rows.length}) – riskiest first\n`));
   rows.forEach(printAuditRow);
   console.log(c.dim('\n(Claude Code plugins are managed inside Claude Code with /plugin.)'));
-  const risky = rows.filter((r) => ['blocked', 'high'].includes(r.risk.level));
+  const risky = rows.filter((r) => manage.needsAttention(r.risk));
   if (!o.fix) {
     if (risky.length) console.log(c.yellow(`\n${risky.length} HIGH-risk item(s). Review them with: skill-scout audit --fix`));
     return;
   }
   if (!risky.length) return console.log(c.green('\nNo HIGH-risk items. Nothing to fix.'));
-  console.log(c.bold('\nFor each HIGH-risk item: [q] quarantine (can be restored)  [d] delete permanently  [s] skip'));
+  console.log(c.bold('\nFor each HIGH-risk item: [t] trust (reviewed, stop warning)  [q] quarantine (restorable)  [d] delete permanently  [s] skip'));
   for (const it of risky) {
-    const ans = (await askChoice(`\n${it.name} (${where(it)}) → [q/d/s]? `)).toLowerCase();
+    const ans = (await askChoice(`\n${it.name} (${where(it)}) → [t/q/d/s]? `)).toLowerCase();
     if (ans === 'q' || ans === 'd') removeOne(it, { permanent: ans === 'd', reason: 'audit --fix' });
+    else if (ans === 't') { manage.trust(it, 'audit --fix'); console.log(c.green(`  ✓ Trusted ${it.name} – you'll be warned again if it changes`)); }
     else console.log(c.dim('  skipped'));
   }
   console.log(c.dim('\nRestart Claude Code / Codex for changes to take effect.'));
@@ -317,6 +323,37 @@ async function cmdRemove(o) {
   if (!o.yes && !(await ask(`\n${action} ${rows.length > 1 ? 'all of these' : 'it'}?`))) return console.log('Cancelled.');
   rows.forEach((it) => removeOne(it, { permanent: !!o.delete, reason: 'manual' }));
   console.log(c.dim('\nRestart Claude Code / Codex for changes to take effect.'));
+}
+
+async function cmdTrust(o) {
+  const manage = require('../lib/manage');
+  const name = o._[1];
+  if (!name) throw new Error('Usage: skill-scout trust <name> [--for claude|codex] [--note "why"]');
+  const matches = manage.find(name, { agent: o.target, scope: o.scopeFilter, kind: o.kind, cwd: process.cwd() });
+  if (!matches.length) throw new Error(`"${name}" is not installed here. See: skill-scout installed`);
+  const rows = matches.map((it) => ({ ...it, risk: manage.riskOf(it) }));
+  rows.forEach(printAuditRow);
+  console.log(c.dim('\nTrusting means: you reviewed it and accept these risks. If its files or config change, the warning comes back.'));
+  if (!o.yes && !(await ask(`Trust ${rows.length > 1 ? 'all of these' : 'it'}?`))) return console.log('Cancelled.');
+  rows.forEach((it) => { manage.trust(it, o.note || ''); console.log(c.green(`  ✓ Trusted ${it.name} (${where(it)})`)); });
+}
+
+function cmdUntrust(o) {
+  const manage = require('../lib/manage');
+  const name = o._[1];
+  if (!name) throw new Error('Usage: skill-scout untrust <name>');
+  const hits = manage.listTrusted().filter((t) => t.name === name && (o.target === 'both' || t.agent === o.target));
+  if (!hits.length) throw new Error(`"${name}" is not trusted. See: skill-scout trusted`);
+  hits.forEach((t) => { manage.untrust(t.key); console.log(`✓ No longer trusted: ${t.name} (${t.agent} ${t.kind}) – it will be warned about again`); });
+}
+
+function cmdTrusted(o) {
+  const list = require('../lib/manage').listTrusted();
+  if (o.json) return console.log(JSON.stringify(list, null, 2));
+  if (!list.length) return console.log('Nothing is trusted yet. Mark a reviewed item with: skill-scout trust <name>');
+  console.log(c.bold('\nTrusted (reviewed) items\n'));
+  list.forEach((t) => console.log(`  ${c.bold(t.name)}  ${c.dim(`${t.agent} ${t.kind}, ${t.scope} – was ${t.level}, trusted ${t.trustedAt.slice(0, 10)}${t.note ? ' – ' + t.note : ''}`)}`));
+  console.log(c.dim('\nUndo with: skill-scout untrust <name>'));
 }
 
 function cmdQuarantine(o) {
@@ -406,7 +443,7 @@ function cmdSchedule(o) {
 async function main() {
   const o = parseArgs(process.argv.slice(2));
   const cmd = o._[0];
-  const table = { top: cmdTop, recommend: cmdRecommend, rec: cmdRecommend, search: cmdSearch, info: cmdInfo, check: cmdCheck, install: cmdInstall, installed: cmdAudit, audit: cmdAudit, remove: cmdRemove, uninstall: cmdRemove, quarantine: cmdQuarantine, restore: cmdRestore, setup: cmdSetup, scan: cmdScan, news: cmdNews, schedule: cmdSchedule, ui: (x) => require('../lib/server').start(x) };
+  const table = { top: cmdTop, recommend: cmdRecommend, rec: cmdRecommend, search: cmdSearch, info: cmdInfo, check: cmdCheck, install: cmdInstall, installed: cmdAudit, audit: cmdAudit, remove: cmdRemove, uninstall: cmdRemove, quarantine: cmdQuarantine, restore: cmdRestore, trust: cmdTrust, untrust: cmdUntrust, trusted: cmdTrusted, setup: cmdSetup, scan: cmdScan, news: cmdNews, schedule: cmdSchedule, ui: (x) => require('../lib/server').start(x) };
   if (!cmd || cmd === 'help' || o.help) return console.log(HELP);
   if (!table[cmd]) throw new Error(`Unknown command "${cmd}". Run: skill-scout help`);
   await table[cmd](o);

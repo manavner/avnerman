@@ -58,10 +58,12 @@ async function handle(req, res, url, token) {
       const body = JSON.parse(await new Promise((r) => { let d = ''; req.on('data', (x) => (d += x)); req.on('end', () => r(d || '{}')); }));
       const manage = require('./manage');
       try {
+        if (body.action === 'untrust') return send(200, { ok: manage.untrust(String(body.key || '')) });
         if (url.pathname === '/api/restore') return send(200, { ok: true, restored: manage.restore(String(body.id || '')) });
         const cwd = body.dir ? path.resolve(body.dir) : process.cwd();
         const it = manage.inventory(cwd).find((x) => x.key === body.key);
         if (!it) return send(404, { error: 'Not installed (anymore?) – refresh the list.' });
+        if (body.action === 'trust') return send(200, { ok: true, trusted: manage.trust(it, 'dashboard') });
         return send(200, { ok: true, removed: manage.remove({ ...it, risk: manage.riskOf(it) }, { permanent: !!body.permanent, reason: 'dashboard', cwd }) });
       } catch (e) { return send(400, { error: e.message }); }
     }

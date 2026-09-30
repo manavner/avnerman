@@ -69,6 +69,11 @@ skill-scout remove <name> --yes            # quarantine (restore: skill-scout re
 skill-scout remove <name> --delete --yes   # permanent – only if the user explicitly asks
 ```
 
+If the user reviewed an item and wants to keep it, offer trust instead:
+`skill-scout trust <name> --note "<why>" --yes`. Trust is tied to the exact
+files/config – the warning returns automatically if they change. Items with
+`trustBroken: true` changed since they were trusted: tell the user clearly.
+
 Remind them to restart Claude Code / Codex afterwards.
 
 ## 6. Installing

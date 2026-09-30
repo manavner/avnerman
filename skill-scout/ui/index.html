@@ -179,22 +179,25 @@ async function doInstalled() {
   const dir = $('#dir').value;
   const [rows, quar] = await Promise.all([api('/api/audit', { dir }), api('/api/quarantine')]);
   const who = (it) => `${it.agent === 'claude' ? 'Claude Code' : 'Codex'} ${it.kind === 'mcp' ? 'MCP' : 'skill'} · ${it.scope}`;
-  const risky = rows.filter((r) => ['blocked', 'high'].includes(r.risk.level)).length;
+  const risky = rows.filter((r) => !r.risk.trusted && ['blocked', 'high'].includes(r.risk.level)).length;
   const row = (it) => `<div class="card" style="cursor:default">
-      <div class="row"><span class="tag lv-${it.risk.level === 'unknown' ? 'medium' : it.risk.level}">${esc(it.risk.level.toUpperCase())}</span><span class="tag">${esc(who(it))}</span>
+      <div class="row">${it.risk.trusted ? `<span class="tag lv-low">TRUSTED</span><span class="tag">was ${esc(it.risk.level)}</span>` : `<span class="tag lv-${it.risk.level === 'unknown' ? 'medium' : it.risk.level}">${esc(it.risk.level.toUpperCase())}</span>`}<span class="tag">${esc(who(it))}</span>
         ${it.risk.official && it.risk.level === 'high' ? '<span class="tag v-RECOMMENDED">official – powerful by design</span>' : ''}</div>
       <h3>${esc(it.name)}</h3>
-      <ul class="muted">${it.risk.reasons.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-      <div class="row"><button class="btn" data-q="${esc(it.key)}">Quarantine</button><button class="btn" data-d="${esc(it.key)}" style="border-color:var(--high);color:var(--high)">Delete</button></div>
+      ${it.risk.trusted ? `<div class="muted">Reviewed ${esc(it.risk.trusted.at.slice(0, 10))} – you'll be warned again if it changes.</div>`
+        : `<ul class="muted">${it.risk.reasons.map((x, i) => `<li${it.risk.trustBroken && i === 0 ? ' class="warn"' : ''}>${esc(x)}</li>`).join('')}</ul>`}
+      <div class="row">${it.risk.trusted ? `<button class="btn" data-u="${esc(it.key)}">Untrust</button>` : it.risk.level !== 'low' ? `<button class="btn" data-t="${esc(it.key)}">Trust</button>` : ''}<button class="btn" data-q="${esc(it.key)}">Quarantine</button><button class="btn" data-d="${esc(it.key)}" style="border-color:var(--high);color:var(--high)">Delete</button></div>
     </div>`;
   $('#installed-list').innerHTML =
-    `<div class="notice">${rows.length} installed · <b>${risky}</b> HIGH-risk. <b>Quarantine</b> moves an item to a safe folder – you can restore it later. <b>Delete</b> is permanent. Restart Claude Code / Codex afterwards. (Plugins: use /plugin inside Claude Code.)</div>
+    `<div class="notice">${rows.length} installed · <b>${risky}</b> HIGH-risk. <b>Trust</b> = you reviewed it (warns again if it changes). <b>Quarantine</b> moves an item to a safe folder – you can restore it later. <b>Delete</b> is permanent. Restart Claude Code / Codex afterwards. (Plugins: use /plugin inside Claude Code.)</div>
      <div class="grid">${rows.map(row).join('') || '<div class="muted">Nothing installed.</div>'}</div>
      <h3>Quarantine</h3>${quar.length ? `<ul>${quar.map((m) => `<li><b>${esc(m.name)}</b> <span class="muted">${esc(m.agent)} ${esc(m.kind)} · ${esc(m.scope)} · ${esc(m.removedAt.slice(0, 16).replace('T', ' '))}</span> <button class="btn" data-r="${esc(m.id)}">Restore</button></li>`).join('')}</ul>` : '<div class="muted">Empty.</div>'}`;
   const act = async (path, body, msg) => { if (!confirm(msg)) return; const r = await api(path, {}, body); if (r.error) alert(r.error); doInstalled(); };
   document.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => act('/api/remove', { key: b.dataset.q, dir }, `Quarantine ${b.dataset.q.split(':').pop()}? You can restore it later.`)));
   document.querySelectorAll('[data-d]').forEach((b) => (b.onclick = () => act('/api/remove', { key: b.dataset.d, dir, permanent: true }, `DELETE ${b.dataset.d.split(':').pop()} permanently? This cannot be undone.`)));
-  document.querySelectorAll('[data-r]').forEach((b) => (b.onclick = () => act('/api/restore', { id: b.dataset.r }, 'Restore this item?')));
+  document.querySelectorAll('[data-t]').forEach((b) => (b.onclick = () => act('/api/remove', { key: b.dataset.t, dir, action: 'trust' }, `Mark ${b.dataset.t.split(':').pop()} as reviewed and trusted? The warning comes back if its files or config change.`)));
+  document.querySelectorAll('[data-u]').forEach((b) => (b.onclick = () => act('/api/restore', { key: b.dataset.u, action: 'untrust' }, `Stop trusting ${b.dataset.u.split(':').pop()}?`)));
+    document.querySelectorAll('[data-r]').forEach((b) => (b.onclick = () => act('/api/restore', { id: b.dataset.r }, 'Restore this item?')));
 }
 function renderNews(r) {
   if (!r) { $('#news-date').textContent = 'No scan yet – press "Scan now" (takes 1–2 minutes).'; $('#news-list').innerHTML = ''; return; }

@@ -629,6 +629,9 @@
       "security": { "level": "low", "permissions": ["varies per skill"], "risks": ["Review each skill's scripts."], "mitigations": [], "warnings": [] }
     }
   ],
+  "builtins": [
+    { "agent": "codex", "name": "node_repl", "description": "Part of Codex itself (its JavaScript REPL tool, referenced in the Codex source code) – not a third-party server" }
+  ],
   "blocklist": [
     { "ecosystem": "npm", "name": "postmark-mcp", "reason": "Malicious: from v1.0.16 (Sept 2025) it silently BCC'd every email sent through it to the attacker (reported by Koi Security). Never install." }
   ],
