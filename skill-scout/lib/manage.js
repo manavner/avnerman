@@ -111,6 +111,13 @@ function inventory(cwd = process.cwd()) {
       items.push({ kind: 'mcp', agent: 'codex', scope: cf.scope, name: n, file: cf.file, config: parseCodexBlock(block), raw: block });
     }
   }
+  // Claude Code plugins (user scope, plus project/local ones for this folder)
+  for (const [id, entries] of Object.entries(require('./install').claudePlugins())) {
+    for (const e of entries || []) {
+      if (e.scope !== 'user' && e.projectPath && !samePath(e.projectPath, cwd)) continue;
+      items.push({ kind: 'plugin', agent: 'claude', scope: e.scope || 'user', name: id, path: e.installPath });
+    }
+  }
   return items.map((it) => ({ ...it, key: `${it.agent}:${it.kind}:${it.scope}:${it.name}` }));
 }
 
@@ -141,10 +148,17 @@ function catalogMatch(it) {
 // catalog id -> ['Claude Code', 'Codex'] for everything that is installed.
 function installedCatalogIds(cwd = process.cwd()) {
   const out = {};
-  for (const it of inventory(cwd)) {
-    const id = it.kind === 'skill' ? it.name : (catalogMatch(it) || {}).id || it.name;
-    const label = it.agent === 'claude' ? 'Claude Code' : 'Codex';
-    out[id] = [...new Set([...(out[id] || []), label])];
+  const inv = inventory(cwd);
+  const add = (id, label) => { out[id] = [...new Set([...(out[id] || []), label])]; };
+  for (const it of inv) {
+    const id = it.kind === 'skill' ? it.name : it.kind === 'plugin' ? (catalogPlugin(it.name) || {}).id || it.name : (catalogMatch(it) || {}).id || it.name;
+    add(id, it.agent === 'claude' ? 'Claude Code' : 'Codex');
+  }
+  // A plugin counts as installed in Codex when all its equivalent skills are there.
+  const codexSkills = new Set(inv.filter((it) => it.agent === 'codex' && it.kind === 'skill').map((it) => it.name));
+  for (const c of catalog.all().filter((x) => x.type === 'plugin')) {
+    const names = require('./install').codexSkillNames(c.install || {});
+    if (names.length && names.every((n) => codexSkills.has(n))) add(c.id, 'Codex');
   }
   return out;
 }
@@ -159,7 +173,20 @@ function riskOf(it) {
     const top = scan.summary.filter((g) => g.severity !== 'low').slice(0, 3).map((g) => `${g.msg} (${g.count}x, e.g. ${g.examples[0].file}:${g.examples[0].line})`);
     return { level: scan.level, reasons: top.length ? top : ['No suspicious patterns'], source: 'scan', fingerprint: scan.hash };
   }
+  if (it.kind === 'plugin') return pluginRisk(it);
   return { ...mcpRisk(it), fingerprint: mcpFingerprint(it) };
+}
+
+const catalogPlugin = (id) => catalog.all().find((c) => c.type === 'plugin' && require('./install').pluginIds(c.install || {}).includes(id)) || null;
+
+// A plugin bundles skills, hooks and sometimes MCP servers: scan its files.
+function pluginRisk(it) {
+  const match = catalogPlugin(it.name);
+  if (!it.path || !exists(it.path)) return { level: 'unknown', reasons: ['Plugin files not found on disk'], source: 'none', fingerprint: sha(it.name), catalogId: match && match.id };
+  const scan = scanSkillDir(it.path);
+  const top = scan.summary.filter((g) => g.severity !== 'low').slice(0, 3).map((g) => `${g.msg} (${g.count}x, e.g. ${g.examples[0].file}:${g.examples[0].line})`);
+  const reasons = [...(match ? match.security.risks.slice(0, 1) : ['Not in the vetted catalog']), ...(top.length ? top : ['No suspicious patterns in its files'])];
+  return { level: scan.level, reasons, source: 'scan', fingerprint: scan.hash, catalogId: match && match.id, official: !!(match && match.official) };
 }
 
 function mcpRisk(it) {
@@ -269,6 +296,13 @@ function remove(it, { permanent = false, reason = '', cwd = process.cwd() } = {}
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const qdir = path.join(QUARANTINE_DIR, `${stamp}_${it.agent}_${it.kind}_${it.name.replace(/[^\w.-]/g, '_')}`);
   const manifest = { id: path.basename(qdir), kind: it.kind, agent: it.agent, scope: it.scope, name: it.name, removedAt: new Date().toISOString(), reason, risk: it.risk && it.risk.level };
+  if (it.kind === 'plugin') {
+    const logs = [];
+    const ok = require('./install').run('claude', ['plugin', 'uninstall', it.name, '-s', it.scope], false, (m) => logs.push(String(m)));
+    if (!ok) throw new Error(`Could not uninstall ${it.name}: ${logs.join(' ')}`);
+    untrust(it.key);
+    return { ...manifest, permanent: true, uninstalled: true };
+  }
   if (it.kind === 'skill') {
     assertSkillPath(it, cwd);
     manifest.originalPath = it.path;

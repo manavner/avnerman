@@ -16,7 +16,7 @@ function hasCmd(cmd) {
   return r.status === 0;
 }
 
-function run(cmd, args, dryRun, log) {
+function run(cmd, args, dryRun, log, { okIf } = {}) {
   log(c.dim(`$ ${[cmd, ...args].map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(' ')}`));
   if (dryRun) return true;
   // On Windows `claude`/`codex` are often .cmd shims that need a shell; cmd.exe
@@ -30,7 +30,7 @@ function run(cmd, args, dryRun, log) {
   const out = `${r.stdout || ''}${r.stderr || ''}`.trim();
   if (out) log(out);
   if (r.error) log(`Error: ${r.error.message}`);
-  return r.status === 0;
+  return r.status === 0 || (!!okIf && okIf.test(out));
 }
 
 function backup(file) {
@@ -164,7 +164,11 @@ async function installSkill({ repo, path: subpath, ref }, opts) {
       log(c.red('High-risk patterns found. Review the files above; re-run with --force only if you trust them.'));
       return false;
     }
-    if (scan.level === 'medium' && !(await confirm('Medium-risk patterns found. Install anyway?'))) return false;
+    if (scan.level === 'medium' && !(await confirm('Medium-risk patterns found. Install anyway?'))) {
+      log(c.yellow('Stopped: medium-risk findings (listed above). Review them, then confirm to install anyway – in the dashboard tick "Accept medium scan findings" and press Install now again.'));
+      if (opts.result) opts.result.needsAcceptMedium = true;
+      return false;
+    }
     const name = path.basename(subpath || repo);
     for (const base of skillDirs(target, scope, cwd)) {
       const dest = path.join(base, name);
@@ -181,18 +185,73 @@ async function installSkill({ repo, path: subpath, ref }, opts) {
   }
 }
 
+// Claude Code plugins installed for this user: { 'name@marketplace': [ {scope, installPath, ...} ] }
+function claudePlugins() {
+  try { return JSON.parse(fs.readFileSync(path.join(HOME, '.claude', 'plugins', 'installed_plugins.json'), 'utf8')).plugins || {}; } catch { return {}; }
+}
+
+// "/plugin marketplace add x" → ['marketplace','add','x'];  "/plugin install p@m" → ['install','p@m']
+const pluginSteps = (inst) => (inst.claude || []).filter((l) => l.startsWith('/plugin ')).map((l) => l.slice('/plugin '.length).trim().split(/\s+/));
+const pluginIds = (inst) => pluginSteps(inst).filter((a) => a[0] === 'install').map((a) => a[1]);
+const codexSkillNames = (inst) => (inst.codexSkills || []).map((sk) => path.basename(sk.path));
+
 // Re-read the agents' config after installing and report where the item is.
 function verify(item, { target, cwd, log }) {
   const inv = require('./manage').inventory(cwd);
-  const kind = item.type === 'mcp' ? 'mcp' : 'skill';
-  const names = kind === 'mcp' ? [item.id] : [path.basename((item.install && item.install.path) || item.id)];
-  const agents = target === 'both' ? ['claude', 'codex'] : [target];
+  const inst = item.install || {};
+  let found = 0;
+  const say = (hit, what, where) => {
+    log(hit ? c.green(`✓ Verified: ${what} is now in ${where}`) : c.red(`✗ ${what} is not in ${where} – see the messages above`));
+    if (hit) found++;
+    return hit;
+  };
   let ok = true;
-  for (const agent of agents) {
-    const hit = inv.find((it) => it.agent === agent && it.kind === kind && names.includes(it.name));
+  for (const agent of target === 'both' ? ['claude', 'codex'] : [target]) {
     const label = agent === 'claude' ? 'Claude Code' : 'Codex';
-    if (hit) log(c.green(`✓ Verified: ${hit.name} is now in ${label} (${hit.scope})`));
-    else { ok = false; log(c.red(`✗ Not found in ${label}'s configuration after installing – see the messages above`)); }
+    if (item.type === 'plugin') {
+      if (agent === 'claude') {
+        const plugins = claudePlugins();
+        for (const id of pluginIds(inst)) ok = say(!!plugins[id], `plugin ${id}`, label) && ok;
+      } else {
+        for (const n of codexSkillNames(inst)) ok = say(inv.some((it) => it.agent === 'codex' && it.kind === 'skill' && it.name === n), `skill ${n}`, label) && ok;
+      }
+      continue;
+    }
+    const kind = item.type === 'mcp' ? 'mcp' : 'skill';
+    const name = kind === 'mcp' ? item.id : path.basename(inst.path || item.id);
+    ok = say(inv.some((it) => it.agent === agent && it.kind === kind && it.name === name), name, label) && ok;
+  }
+  return { ok, any: found > 0 };
+}
+
+async function installPlugin(item, opts) {
+  const { target, scope, dryRun, log } = opts;
+  const inst = item.install || {};
+  let ok = true;
+  if (target !== 'codex' && inst.claude) {
+    if (hasCmd('claude') || dryRun) {
+      log(c.bold('\nInstalling the Claude Code plugin:'));
+      for (const step of pluginSteps(inst)) {
+        const args = ['plugin', ...step];
+        if (step[0] === 'install') args.push('-s', scope === 'project' ? 'project' : 'user');
+        // Adding a marketplace that is already there is fine.
+        ok = run('claude', args, dryRun, log, { okIf: /already/i }) && ok;
+      }
+      if (!pluginIds(inst).length) log(c.dim('Marketplace added – choose its plugins with /plugin inside Claude Code.'));
+    } else {
+      ok = false;
+      log(c.yellow('\n`claude` CLI not found. Run these commands inside a Claude Code session:'));
+      inst.claude.forEach((cmd) => log('  ' + c.cyan(cmd)));
+    }
+  }
+  if (target !== 'claude') {
+    if (inst.codexSkills) {
+      log(c.bold('\nInstalling the equivalent skills for Codex:'));
+      for (const sk of inst.codexSkills) ok = (await installSkill(sk, { ...opts, target: 'codex' })) && ok;
+    } else if (inst.codex) {
+      log(c.bold('\nFor Codex, run:'));
+      inst.codex.forEach((cmd) => log('  ' + c.cyan(cmd)));
+    } else log(c.yellow('No Codex equivalent for this plugin.'));
   }
   return ok;
 }
@@ -214,19 +273,15 @@ async function install(item, opts) {
     if (inst.transport === 'http' && !secrets.length) log(c.dim('Remote server: if it asks you to sign in, use /mcp in Claude Code, or in Codex: codex mcp login ' + item.id));
   } else if (item.type === 'skill') {
     ok = await installSkill(inst, opts);
+  } else if (item.type === 'plugin') {
+    ok = await installPlugin(item, opts);
   }
-  if (!opts.dryRun && (item.type === 'mcp' || item.type === 'skill')) ok = verify(item, opts) && ok; else if (item.type === 'plugin') {
-    if (target !== 'codex' && inst.claude) {
-      log(c.bold('\nClaude Code plugins are installed from inside Claude Code. Run these commands in a Claude Code session:'));
-      inst.claude.forEach((cmd) => log('  ' + c.cyan(cmd)));
-    }
-    if (target !== 'claude') {
-      if (inst.codexSkills) {
-        log(c.bold('\nInstalling the equivalent skills for Codex:'));
-        for (const s of inst.codexSkills) ok = (await installSkill(s, { ...opts, target: 'codex' })) && ok;
-      } else if (inst.codex) inst.codex.forEach((cmd) => log('  ' + c.cyan(cmd)));
-      else log(c.yellow('No Codex equivalent for this plugin.'));
-    }
+  if (!opts.dryRun) {
+    log(c.bold('\nResult:'));
+    const v = verify(item, opts);
+    // Some parts installed, others stopped (e.g. one skill declined).
+    if (opts.result && v.any && !(ok && v.ok)) opts.result.partial = true;
+    ok = ok && v.ok;
   }
   return ok;
 }
@@ -235,12 +290,12 @@ async function install(item, opts) {
 
 // Names of installed items, grouped per agent (scope shown when not user-level).
 function listInstalled(cwd) {
-  const out = { claudeMcp: [], codexMcp: [], claudeSkills: [], codexSkills: [] };
+  const out = { claudeMcp: [], codexMcp: [], claudeSkills: [], codexSkills: [], claudePlugins: [] };
   for (const it of require('./manage').inventory(cwd)) {
-    const key = `${it.agent}${it.kind === 'mcp' ? 'Mcp' : 'Skills'}`;
+    const key = `${it.agent}${{ mcp: 'Mcp', skill: 'Skills', plugin: 'Plugins' }[it.kind]}`;
     out[key].push(it.scope === 'user' ? it.name : `${it.name} (${it.scope})`);
   }
   return out;
 }
 
-module.exports = { install, installSkill, fetchRepoPath, listInstalled, codexTomlBlock, hasCmd, skillDirs };
+module.exports = { run, claudePlugins, pluginIds, codexSkillNames, install, installSkill, fetchRepoPath, listInstalled, codexTomlBlock, hasCmd, skillDirs };

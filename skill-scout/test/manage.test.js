@@ -180,3 +180,18 @@ test('install verifies the result; a preview changes nothing', async () => {
   // Claude already had it under another name ('docs', same URL) – recognised as context7 too.
   assert.deepStrictEqual(manage.installedCatalogIds(proj).context7, ['Claude Code', 'Codex']);
 });
+
+test('Claude Code plugins are listed, scanned and matched to the catalog', () => {
+  const pdir = path.join(home, '.claude', 'plugins', 'cache', 'superpowers-marketplace', 'superpowers', '1.0.0');
+  fs.mkdirSync(path.join(pdir, 'skills', 'x'), { recursive: true });
+  fs.writeFileSync(path.join(pdir, 'skills', 'x', 'SKILL.md'), '---\nname: x\ndescription: x\n---\nHi\n');
+  fs.writeFileSync(path.join(home, '.claude', 'plugins', 'installed_plugins.json'), JSON.stringify({
+    version: 2, plugins: { 'superpowers@superpowers-marketplace': [{ scope: 'user', installPath: pdir, version: '1.0.0' }] },
+  }));
+  const r = byName(manage.audit(proj), 'superpowers@superpowers-marketplace');
+  assert.strictEqual(r.kind, 'plugin');
+  assert.strictEqual(r.risk.catalogId, 'superpowers');
+  assert.strictEqual(r.risk.level, 'low');
+  assert.ok(manage.installedCatalogIds(proj).superpowers.includes('Claude Code'));
+  assert.deepStrictEqual(require('../lib/install').pluginIds(require('../lib/catalog').get('superpowers').install), ['superpowers@superpowers-marketplace']);
+});

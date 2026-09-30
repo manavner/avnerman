@@ -137,7 +137,7 @@ skill-scout news                           # show the latest report
 | MCP לפרויקט אחד | `.mcp.json` | `.codex/config.toml` |
 | Skills לכל הפרויקטים | `~/.claude/skills/` | `~/.codex/skills/` |
 | Skills לפרויקט אחד | `.claude/skills/` | `.agents/skills/` |
-| Plugins | מודפסות פקודות `/plugin ...` להרצה בתוך Claude Code | מותקנים ה-skills המקבילים |
+| Plugins | מותקנים ישירות (`claude plugin install`), ומופיעים ב-Installed עם סריקת אבטחה | מותקנים ה-skills המקבילים |
 
 לפני כל שינוי בקובץ קונפיגורציה נשמר גיבוי בשם `*.bak-skill-scout`.
 
