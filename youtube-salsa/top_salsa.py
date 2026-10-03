@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Build a private YouTube playlist "Top 60 Salsa" from the most-listed salsa songs.
+"""Build a private YouTube playlist "AVNER <Topic> <creation date>" from the 60 most-listed songs of a genre.
 
-1. Search playlists for several salsa queries (up to 200 unique).
+1. Search playlists for the topic's queries (up to 200 unique), optionally only those created
+   in the last N years.
 2. Read every playlist's videos (private/deleted/blocked playlists are skipped and logged).
 3. Rank songs by number of playlists they appear in, views as tie-breaker.
    Versions of the same song (same normalized artist + title) are merged.
 4. Write the full ranking to CSV and sync the private playlist with the top 60
    (created on the first run, then only changed songs are added/removed/moved).
 
-Usage:  python top_salsa.py [--dry-run]
+Usage:  python top_salsa.py [--dry-run] [--topic tango | --topic "rueda de casino, casino timba"] [--years 3]
 Runs on GitHub Actions too (.github/workflows/top-salsa.yml), started from /salsa.html on the site.
 """
 import argparse
@@ -17,9 +18,12 @@ import html
 import json
 import logging
 import os
+import random
 import re
 import time
 import unicodedata
+import urllib.parse
+import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
@@ -29,16 +33,25 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-QUERIES = ["salsa", "salsa cubana", "salsa clásica", "salsa romántica"]
 MAX_PLAYLISTS = 200
 TOP_N = 60
+FIXED_TOP = 20  # always in the playlist; the other TOP_N - FIXED_TOP are drawn from the pool
+POOL = 200  # songs ranked 1..POOL can be drawn
+REPEAT_WEIGHT = 0.3  # a song already in the playlist is this much less likely to be drawn again
+# draw weight = playlist_count ** (VARIETY_K * (10 - variety)). Measured on the salsa ranking:
+# variety 1 ≈ 9 new songs per run, 3 ≈ 13, 5 ≈ 20, 8 ≈ 33, 10 ≈ 38 (100 quota units per new song)
+VARIETY_K = 1.5
 MIN_SECONDS, MAX_SECONDS = 120, 720  # drop clips and hour-long mixes
-PLAYLIST_TITLE = "Top 60 Salsa"
+# a topic word alone gets a few query variations; a preset (or a comma list from the user) is used as-is
+PRESETS = {"salsa": ["salsa", "salsa cubana", "salsa clásica", "salsa romántica"],
+           "rueda": ["rueda de casino", "rueda de casino salsa", "casino rueda music"]}
+# playlists mixing in another genre are dropped (genres named in the queries themselves are kept)
+GENRES = ["salsa", "bachata", "merengue", "cumbia", "vallenato", "kizomba", "reggae", "reggaeton", "tango",
+          "zouk", "kompa", "dembow", "champeta"]
 LESSON_WORDS = (r"learn|tutorial|lesson|clase|curso|cours|course|kurs|dersleri|aulas|beginner|principiante|"
                 r"d[eé]butant|intermedi|advanced|footwork|how to|pasos|paso b[aá]sico|aprend|steps|moves|"
                 r"patterns|partnerwork|styling|shines?\b|isolation|tricks|hand toss|musicality|dance tips|"
                 r"perder peso|cardio|zumba|guitar|lipsync|serie|diaries|niveau|lezioni|tutorials|challenge")
-BAD_PLAYLIST = re.compile(LESSON_WORDS + r"|bachata|merengue|cumbia|vallenato|kizomba|reggae", re.I)
 BAD_VIDEO = re.compile(LESSON_WORDS + r"|\bmix\b|full album|[aá]lbum completo|enganchados|medley", re.I)
 JUNK_WORDS = (r"official|oficial|video|videoclip|audio|lyrics?|letra|con letra|remaster(ed)?|hd|hq|4k|"
               r"live|en vivo|wmv|mp4|mp3|avi|flv|karaoke|musical|clip|salsa version|version salsa")
@@ -46,11 +59,55 @@ SCOPES = ["https://www.googleapis.com/auth/youtube.force-ssl"]
 HERE = Path(__file__).parent
 CLIENT_SECRET = HERE / "client_secret.json"
 TOKEN = HERE / "token.json"
-CSV_OUT = HERE / "salsa_ranking.csv"
 CACHE_FILE = HERE / "cache.json"  # API responses; delete it to fetch fresh data
 
 log = logging.getLogger("salsa")
 cache = {"search": {}, "playlist": {}, "video": {}}
+
+# Hebrew genre names; anything else in Hebrew goes through Google Translate
+HEBREW = {"סלסה": "salsa", "טנגו": "tango", "רגאטון": "reggaeton", "רגטון": "reggaeton", "בצ'אטה": "bachata",
+          "באצ'טה": "bachata", "בצאטה": "bachata", "קיזומבה": "kizomba", "מרנגה": "merengue", "קומביה": "cumbia",
+          "רואדה": "rueda", "זוק": "zouk", "רגאיי": "reggae", "וואלס": "waltz", "בולרו": "bolero"}
+
+# set by configure() from --topic / --years
+QUERIES, PLAYLIST_NAME, CSV_OUT, PUBLISHED_AFTER, BAD_PLAYLIST = [], "", None, None, None
+
+
+def to_english(text):
+    """Hebrew topic -> English ('טנגו' -> 'tango'); Latin-script text is kept ('rueda' must not become 'wheel')."""
+    if not re.search(r"[֐-׿]", text):
+        return text
+    if text in HEBREW:
+        return HEBREW[text]
+    url = ("https://translate.googleapis.com/translate_a/single?client=gtx&sl=iw&tl=en&dt=t&q="
+           + urllib.parse.quote(text))
+    with urllib.request.urlopen(url, timeout=15) as r:
+        return "".join(part[0] for part in json.load(r)[0]).strip().lower()
+
+
+def configure(topic, years):
+    """'tango' -> queries, playlist 'AVNER Tango <date>', tango_ranking.csv; years -> only playlists created since."""
+    global QUERIES, PLAYLIST_NAME, CSV_OUT, PUBLISHED_AFTER, BAD_PLAYLIST
+    topic = ",".join(to_english(re.sub(r"\s+", " ", q).strip().lower()) for q in topic.split(","))
+    if "," in topic:
+        QUERIES = [q.strip() for q in topic.split(",") if q.strip()]
+    else:
+        variants = [topic, f"best {topic} songs"] if "music" in topic else \
+            [topic, f"{topic} music", f"best {topic} songs"]
+        QUERIES = PRESETS.get(topic, variants)
+    name = QUERIES[0]
+    PLAYLIST_NAME = name.title()
+    CSV_OUT = HERE / f"{norm(name).replace(' ', '_') or 'topic'}_ranking.csv"
+    if years:
+        # first day of the month, so the search cache stays valid for the whole month
+        start = time.gmtime(time.time() - years * 365.25 * 86400)
+        PUBLISHED_AFTER = f"{start.tm_year:04d}-{start.tm_mon:02d}-01T00:00:00Z"
+    else:
+        PUBLISHED_AFTER = None
+    wanted = " ".join(norm(q) for q in QUERIES)
+    others = [g for g in GENRES if not re.search(rf"\b{norm(g)}\b", wanted)]
+    BAD_PLAYLIST = re.compile(LESSON_WORDS + "".join(rf"|\b{g}\b" for g in others), re.I)
+    log.info("topic %r: queries %s, playlists created after %s", name, QUERIES, PUBLISHED_AFTER or "any time")
 
 
 def load_cache():
@@ -89,10 +146,11 @@ def search_playlists(yt):
         target = MAX_PLAYLISTS * qi // len(QUERIES)
         token, pages, dropped = None, 0, 0
         while len(found) < target and pages < 10:
-            ck = f"{q}|{token or ''}"
+            ck = f"{q}|{token or ''}" + (f"|{PUBLISHED_AFTER}" if PUBLISHED_AFTER else "")
             if ck not in cache["search"]:
+                extra = {"publishedAfter": PUBLISHED_AFTER} if PUBLISHED_AFTER else {}
                 cache["search"][ck] = yt.search().list(
-                    part="snippet", q=q, type="playlist", maxResults=50, pageToken=token).execute()
+                    part="snippet", q=q, type="playlist", maxResults=50, pageToken=token, **extra).execute()
                 save_cache()
             resp = cache["search"][ck]
             pages += 1
@@ -317,6 +375,8 @@ def rank(yt, playlists):
                      "artist": max(a_views, key=a_views.get) if a_views else "",
                      "playlists": len(in_lists[key]), "views": valid[best][1]})
     rows.sort(key=lambda r: (r["playlists"], r["views"]), reverse=True)
+    for i, r in enumerate(rows, 1):
+        r["rank"] = i
     return rows
 
 
@@ -330,34 +390,88 @@ def write_csv(rows):
     log.info("wrote %s (%d rows)", CSV_OUT, len(rows))
 
 
-def find_playlist(yt):
-    """Id of my existing private playlist named PLAYLIST_TITLE, or None."""
+def playlist_body(title, pid=None):
+    body = {"snippet": {"title": title, "description":
+                        f"Most-listed songs across YouTube playlists for: {', '.join(QUERIES)}."
+                        + (f" Playlists created after {PUBLISHED_AFTER[:10]}." if PUBLISHED_AFTER else "")},
+            "status": {"privacyStatus": "private"}}
+    if pid:
+        body["id"] = pid
+    return body
+
+
+def find_playlist(yt, write=True):
+    """(id, title) of my private playlist for this topic: 'AVNER <Topic> <yyyy-mm-dd>', or the older
+    'Top 60 <Topic>' name (renamed here to the new format, keeping its creation date). None if missing."""
+    current = re.compile(rf"AVNER {re.escape(PLAYLIST_NAME)} \d{{4}}-\d{{2}}-\d{{2}}")
     token = None
     while True:
         resp = yt.playlists().list(part="snippet,status", mine=True, maxResults=50, pageToken=token).execute()
         for pl in resp["items"]:
-            if pl["snippet"]["title"] == PLAYLIST_TITLE and pl["status"]["privacyStatus"] == "private":
-                return pl["id"]
+            title, private = pl["snippet"]["title"], pl["status"]["privacyStatus"] == "private"
+            if private and current.fullmatch(title):
+                return pl["id"], title
+            if private and title == f"Top {TOP_N} {PLAYLIST_NAME}":
+                new = f"AVNER {PLAYLIST_NAME} {pl['snippet']['publishedAt'][:10]}"
+                if write:
+                    yt.playlists().update(part="snippet,status", body=playlist_body(new, pl["id"])).execute()
+                    log.info("renamed %r -> %r", title, new)
+                return pl["id"], new
         token = resp.get("nextPageToken")
         if not token:
             return None
 
 
-def sync_playlist(yt, rows):
-    """Make the playlist hold exactly rows, in order. Only changed songs cost quota (50 units each)."""
-    pid = find_playlist(yt)
-    if pid is None:
-        pid = yt.playlists().insert(part="snippet,status", body={
-            "snippet": {"title": PLAYLIST_TITLE, "description": "Most-listed salsa songs across YouTube playlists."},
-            "status": {"privacyStatus": "private"}}).execute()["id"]
-        log.info("created playlist %s", pid)
-    items, token = [], None  # [(item id, video id)] in playlist order
+def open_playlist(yt, write=True):
+    """(id, title, [(item id, video id)] in order) of this topic's playlist, or None if there is none yet."""
+    found = find_playlist(yt, write)
+    if not found:
+        return None
+    pid, title = found
+    items, token = [], None
     while True:
         resp = yt.playlistItems().list(part="snippet", playlistId=pid, maxResults=50, pageToken=token).execute()
         items += [(it["id"], it["snippet"]["resourceId"]["videoId"]) for it in resp["items"]]
         token = resp.get("nextPageToken")
         if not token:
-            break
+            return pid, title, items
+
+
+def choose(rows, variety, current_vids, rng):
+    """The TOP_N songs for this run.
+    - The FIXED_TOP best-ranked songs are always in, at the top.
+    - The rest are drawn from ranks FIXED_TOP+1..POOL, weighted by playlist count: variety 0 = exactly the
+      top TOP_N, 10 = almost uniform. Songs already in the playlist weigh REPEAT_WEIGHT as much, so every
+      run brings new songs.
+    - Songs kept from the current playlist stay in their current order and new ones follow by rank,
+      so the sync needs no moves (moves cost quota)."""
+    if variety <= 0:
+        return rows[:TOP_N]
+    fixed, pool = rows[:FIXED_TOP], rows[FIXED_TOP:POOL]
+    alpha = VARIETY_K * (10 - min(variety, 10))
+    current = {v: i for i, v in enumerate(current_vids)}
+
+    def key(r):  # Efraimidis-Spirakis weighted sampling without replacement
+        w = r["playlists"] ** alpha * (REPEAT_WEIGHT if r["video_id"] in current else 1)
+        return rng.random() ** (1 / w)
+
+    picks = sorted(pool, key=key, reverse=True)[:TOP_N - FIXED_TOP]
+    kept = sorted((r for r in picks if r["video_id"] in current), key=lambda r: current[r["video_id"]])
+    new = sorted((r for r in picks if r["video_id"] not in current), key=lambda r: r["rank"])
+    log.info("variety %s: %d fixed, %d kept, %d new", variety, len(fixed), len(kept), len(new))
+    return fixed + kept + new
+
+
+def sync_playlist(yt, rows, current):
+    """Make the playlist hold exactly rows, in order. Only changed songs cost quota (50 units each)."""
+    if current:
+        pid, title, items = current
+    else:
+        title = f"AVNER {PLAYLIST_NAME} {time.strftime('%Y-%m-%d')}"
+        pid = yt.playlists().insert(part="snippet,status", body=playlist_body(title)).execute()["id"]
+        items = []
+        log.info("created playlist %r (%s)", title, pid)
+    items = list(items)  # [(item id, video id)] in playlist order
 
     target = [r["video_id"] for r in rows]
     removed = added = moved = 0
@@ -386,7 +500,7 @@ def sync_playlist(yt, rows):
         time.sleep(0.3)
     log.info("playlist synced: %d added, %d removed, %d moved", added, removed, moved)
     log.info("playlist: https://www.youtube.com/playlist?list=%s", pid)
-    return pid, added, removed, moved
+    return pid, title, added, removed, moved
 
 
 def write_summary(rows, sync=None):
@@ -394,15 +508,17 @@ def write_summary(rows, sync=None):
     path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not path:
         return
-    lines = ["# Top 60 Salsa", ""]
+    lines = [f"# {sync[1] if sync else 'AVNER ' + PLAYLIST_NAME}", "",
+             f"Searches: {', '.join(QUERIES)}. Playlists created "
+             + (f"after {PUBLISHED_AFTER[:10]}." if PUBLISHED_AFTER else "at any time."), ""]
     if sync:
-        pid, added, removed, moved = sync
+        pid, _, added, removed, moved = sync
         lines += [f"Playlist: https://www.youtube.com/playlist?list={pid}",
                   f"Changes: {added} added, {removed} removed, {moved} moved", ""]
     else:
         lines += ["Dry run: the YouTube playlist was not changed.", ""]
-    lines += ["| # | Artist | Song | Playlists |", "|---|---|---|---|"]
-    lines += [f"| {i} | {r['artist']} | [{r['title']}](https://www.youtube.com/watch?v={r['video_id']}) "
+    lines += ["| # | Rank | Artist | Song | Playlists |", "|---|---|---|---|---|"]
+    lines += [f"| {i} | {r['rank']} | {r['artist']} | [{r['title']}](https://www.youtube.com/watch?v={r['video_id']}) "
               f"| {r['playlists']} |" for i, r in enumerate(rows, 1)]
     with open(path, "a", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
@@ -411,9 +527,18 @@ def write_summary(rows, sync=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true", help="rank and write CSV, but do not touch the playlist")
+    ap.add_argument("--topic", default="salsa",
+                    help="genre to rank, e.g. 'tango', or several searches separated by commas")
+    ap.add_argument("--years", type=float, default=0,
+                    help="only use playlists created in the last N years (0 = any time)")
+    ap.add_argument("--variety", type=float, default=5,
+                    help=f"0 = exactly the top {TOP_N}; up to 10 = more songs drawn from ranks "
+                         f"{FIXED_TOP + 1}-{POOL} (the top {FIXED_TOP} always stay)")
+    ap.add_argument("--seed", type=int, help="random seed, to repeat a run's draw")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                         handlers=[logging.StreamHandler(), logging.FileHandler(HERE / "run.log", encoding="utf-8")])
+    configure(args.topic, args.years)
     load_cache()
     yt = get_service()
     try:
@@ -421,8 +546,12 @@ def main():
     finally:
         save_cache()  # keep progress even if quota runs out mid-run
     write_csv(rows)
-    sync = None if args.dry_run else sync_playlist(yt, rows[:TOP_N])
-    write_summary(rows[:TOP_N], sync)
+    current = open_playlist(yt, write=not args.dry_run)
+    seed = args.seed if args.seed is not None else random.randrange(1_000_000)
+    log.info("random seed %d", seed)
+    picked = choose(rows, args.variety, [v for _, v in current[2]] if current else [], random.Random(seed))
+    sync = None if args.dry_run else sync_playlist(yt, picked, current)
+    write_summary(picked, sync)
 
 
 if __name__ == "__main__":

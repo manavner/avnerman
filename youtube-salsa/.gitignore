@@ -1,7 +1,7 @@
 client_secret.json
 token.json
 run.log
-salsa_ranking.csv
+*_ranking.csv
 __pycache__/
 .venv/
 cache.json

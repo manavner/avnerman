@@ -1,6 +1,7 @@
 # Runs youtube-salsa/top_salsa.py in the cloud. Started from /salsa.html (api/salsa.js) or the Actions tab.
 # Needs repo secrets YT_CLIENT_SECRET_JSON and YT_TOKEN_JSON (contents of client_secret.json / token.json).
 name: Top 60 Salsa
+run-name: "${{ inputs.topic }} · ${{ inputs.years && format('{0}y', inputs.years) || 'all years' }} · variety ${{ inputs.variety }} · ${{ inputs.mode }}"
 
 on:
   workflow_dispatch:
@@ -10,6 +11,18 @@ on:
         type: choice
         options: [update, dry-run]
         default: update
+      topic:
+        description: "Genre, e.g. salsa, tango, rueda, reggaeton (Hebrew is fine), or searches separated by commas"
+        type: string
+        default: salsa
+      years:
+        description: "Only playlists created in the last N years (empty or 0 = any time)"
+        type: string
+        default: ""
+      variety:
+        description: "0 = exactly the top 60; 1-10 = the top 20 stay, the rest is drawn (1 ≈ 9 new songs, 5 ≈ 20, 10 ≈ 38)"
+        type: string
+        default: "5"
 
 concurrency:
   group: top-salsa
@@ -58,14 +71,19 @@ jobs:
       - name: Rank and sync
         env:
           MODE: ${{ inputs.mode }}
+          TOPIC: ${{ inputs.topic }}
+          YEARS: ${{ inputs.years }}
+          VARIETY: ${{ inputs.variety }}
         run: |
-          if [ "$MODE" = "dry-run" ]; then python top_salsa.py --dry-run; else python top_salsa.py; fi
+          args=(--topic "${TOPIC:-salsa}" --years "${YEARS:-0}" --variety "${VARIETY:-5}")
+          if [ "$MODE" = "dry-run" ]; then args+=(--dry-run); fi
+          python top_salsa.py "${args[@]}"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: salsa-ranking
-          path: youtube-salsa/salsa_ranking.csv
+          path: youtube-salsa/*_ranking.csv
           if-no-files-found: ignore
 
       - name: Remove credentials
