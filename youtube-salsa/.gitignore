@@ -3,3 +3,6 @@ token.json
 run.log
 salsa_ranking.csv
 __pycache__/
+.venv/
+cache.json
+client_secret*.json
