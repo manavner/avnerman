@@ -1,0 +1,8 @@
+client_secret.json
+token.json
+run.log
+*_ranking.csv
+__pycache__/
+.venv/
+cache.json
+client_secret*.json

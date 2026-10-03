@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Top 60 Playlists</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Heebo:wght@300;400;600&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --bg: #060d1a;
+      --accent: #ff8c00;
+      --accent2: #00c8ff;
+      --text: #e8eaf0;
+      --text-dim: #8899aa;
+      --card-bg: rgba(10, 22, 40, 0.85);
+      --border: rgba(0, 200, 255, 0.15);
+      --ok: #3ddc84;
+      --bad: #ff5c5c;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Heebo', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 440px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 24px;
+    }
+
+    h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.6rem;
+      color: var(--accent);
+      text-align: center;
+      direction: ltr;
+      margin-bottom: 6px;
+    }
+
+    .sub { text-align: center; color: var(--text-dim); margin-bottom: 28px; }
+
+    label { display: block; margin: 16px 0 6px; color: var(--text-dim); font-size: .95rem; }
+
+    input, select, button {
+      width: 100%;
+      font: inherit;
+      font-size: 1rem;
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    input[type="range"] { padding: 0; accent-color: var(--accent); }
+
+    input, select {
+      background: #0a1628;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    input:focus, select:focus { outline: 2px solid var(--accent2); outline-offset: 1px; }
+
+    button {
+      margin-top: 24px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      color: #060d1a;
+      background: linear-gradient(135deg, var(--accent), #ff6600);
+    }
+
+    button:disabled { opacity: .5; cursor: wait; }
+
+    .msg { margin-top: 18px; min-height: 1.5em; text-align: center; }
+    .msg.ok { color: var(--ok); }
+    .msg.bad { color: var(--bad); }
+
+    .runs { margin-top: 20px; list-style: none; }
+    .runs li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+      font-size: .95rem;
+    }
+    .runs a { color: var(--accent2); }
+
+    .hint { margin-top: 6px; color: var(--text-dim); font-size: .85rem; }
+    .hint.center { text-align: center; margin-top: 8px; }
+
+    .playlist {
+      display: block;
+      margin-top: 24px;
+      text-align: center;
+      color: var(--accent2);
+    }
+  </style>
+</head>
+
+<body>
+  <main class="card">
+    <h1>Top 60</h1>
+    <p class="sub">60 השירים הנפוצים ביותר ברשימות YouTube, לפי נושא</p>
+
+    <form id="form">
+      <label for="password">סיסמה</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+
+      <label for="topic">נושא</label>
+      <input id="topic" type="text" value="salsa" maxlength="80" required
+        placeholder="למשל: tango, rueda, reggaeton, טנגו">
+      <p class="hint">אפשר גם כמה חיפושים מופרדים בפסיק. נושא בעברית יתורגם לאנגלית.</p>
+
+      <label for="years">רק רשימות מ-X השנים האחרונות</label>
+      <input id="years" type="number" min="0" max="30" step="1" inputmode="numeric" placeholder="ריק = כל השנים">
+
+      <label for="variety">גיוון: <output id="variety-out">5</output></label>
+      <input id="variety" type="range" min="0" max="10" step="1" value="5">
+      <p class="hint" id="variety-hint"></p>
+
+      <label for="mode">פעולה</label>
+      <select id="mode">
+        <option value="update">עדכון הרשימה ב-YouTube</option>
+        <option value="dry-run">רק דירוג, בלי לשנות את הרשימה</option>
+      </select>
+
+      <button id="run" type="submit">הפעל</button>
+    </form>
+
+    <p id="msg" class="msg" role="status"></p>
+    <ul id="runs" class="runs"></ul>
+
+    <a class="playlist" href="https://www.youtube.com/feed/playlists" target="_blank" rel="noopener">
+      הרשימות שלי ב-YouTube ←
+    </a>
+    <p class="hint center">כל נושא מקבל רשימה פרטית משלו: AVNER &lt;נושא&gt; &lt;תאריך יצירה&gt;</p>
+  </main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const STATUS = {
+      queued: "ממתין",
+      in_progress: "רץ…",
+      success: "הסתיים ✓",
+      failure: "נכשל ✗",
+      cancelled: "בוטל",
+    };
+    let pollTimer = null;
+
+    // measured on the salsa ranking: new songs per run at each variety level
+    const NEW_SONGS = [0, 9, 11, 13, 16, 20, 25, 28, 33, 36, 38];
+    function showVariety() {
+      const v = Number($("variety").value);
+      $("variety-out").textContent = v;
+      $("variety-hint").textContent = v === 0
+        ? "בדיוק 60 המובילים, בלי הגרלה."
+        : `20 המובילים קבועים, כ-${NEW_SONGS[v]} שירים חדשים בכל הרצה (מתוך 200 המובילים). ` +
+          `עולה כ-${(NEW_SONGS[v] * 100).toLocaleString("he-IL")} יחידות מכסה מתוך 10,000 ביום.`;
+    }
+    $("variety").addEventListener("input", showVariety);
+    showVariety();
+
+    async function api(body) {
+      const res = await fetch("/api/salsa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: $("password").value, ...body }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `שגיאה ${res.status}`);
+      return data;
+    }
+
+    function say(text, kind = "") {
+      $("msg").textContent = text;
+      $("msg").className = "msg " + kind;
+    }
+
+    function renderRuns(runs) {
+      $("runs").replaceChildren(...runs.map(r => {
+        const li = document.createElement("li");
+        const when = new Date(r.created_at).toLocaleString("he-IL",
+          { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+        const state = document.createElement("span");
+        state.textContent = `${when} · ${r.title || ""} · ${STATUS[r.conclusion || r.status] || r.status}`;
+        const link = document.createElement("a");
+        link.href = r.url;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = "פרטים";
+        li.append(state, link);
+        return li;
+      }));
+      return runs[0] && runs[0].status !== "completed";
+    }
+
+    async function refresh() {
+      try {
+        const { runs } = await api({ action: "status" });
+        const running = renderRuns(runs);
+        if (!running) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          const last = runs[0];
+          if (last && last.conclusion === "success") say("ההרצה האחרונה הסתיימה בהצלחה", "ok");
+          else if (last && last.conclusion === "failure") say("ההרצה האחרונה נכשלה – ראה פרטים", "bad");
+        }
+      } catch (e) {
+        say(e.message, "bad");
+      }
+    }
+
+    $("form").addEventListener("submit", async e => {
+      e.preventDefault();
+      $("run").disabled = true;
+      say("מפעיל…");
+      try {
+        await api({ action: "run", mode: $("mode").value, topic: $("topic").value, years: $("years").value,
+                    variety: $("variety").value });
+        say("ההרצה התחילה. זה לוקח כמה דקות.", "ok");
+        setTimeout(refresh, 4000); // GitHub needs a moment to list the new run
+        clearInterval(pollTimer);
+        pollTimer = setInterval(refresh, 15000);
+      } catch (err) {
+        say(err.message, "bad");
+      } finally {
+        $("run").disabled = false;
+      }
+    });
+  </script>
+</body>
+
+</html>
