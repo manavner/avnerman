@@ -1,5 +1,5 @@
 // Password-protected trigger for the "Top 60 Salsa" GitHub Actions workflow (page: /salsa.html).
-// POST { password, action: "run", mode: "update" | "dry-run", topic, years, variety } → starts the workflow
+// POST { password, action: "run", topic, years, variety } → starts the workflow (creates a new playlist)
 // POST { password, action: "status" }                         → latest workflow runs
 // Env: SALSA_PASSWORD, and SALSA_GITHUB_TOKEN (fine-grained, Actions: read & write on this repo)
 // or GITHUB_TOKEN if that one already has Actions access.
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       const r = await github("/dispatches", {
         method: "POST",
         body: JSON.stringify({ ref: "main", inputs: {
-          mode: mode === "dry-run" ? "dry-run" : "update",
+          mode: mode === "dry-run" ? "dry-run" : "create",
           topic: t,
           years: y ? String(y) : "",
           variety: String(v),

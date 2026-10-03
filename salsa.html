@@ -134,13 +134,7 @@
       <input id="variety" type="range" min="0" max="10" step="1" value="5">
       <p class="hint" id="variety-hint"></p>
 
-      <label for="mode">פעולה</label>
-      <select id="mode">
-        <option value="update">עדכון הרשימה ב-YouTube</option>
-        <option value="dry-run">רק דירוג, בלי לשנות את הרשימה</option>
-      </select>
-
-      <button id="run" type="submit">הפעל</button>
+      <button id="run" type="submit">צור רשימה חדשה</button>
     </form>
 
     <p id="msg" class="msg" role="status"></p>
@@ -149,7 +143,9 @@
     <a class="playlist" href="https://www.youtube.com/feed/playlists" target="_blank" rel="noopener">
       הרשימות שלי ב-YouTube ←
     </a>
-    <p class="hint center">כל נושא מקבל רשימה פרטית משלו: AVNER &lt;נושא&gt; &lt;תאריך יצירה&gt;</p>
+    <p class="hint center">כל הפעלה יוצרת רשימה פרטית חדשה בשם AVNER &lt;נושא&gt; &lt;תאריך&gt;. רשימות קודמות
+      לא משתנות. כל רשימה עולה כ-3,000 יחידות מכסה מתוך 10,000 ביום, ועוד כ-2,000 בפעם הראשונה בשבוע לכל
+      נושא.</p>
   </main>
 
   <script>
@@ -169,9 +165,9 @@
       const v = Number($("variety").value);
       $("variety-out").textContent = v;
       $("variety-hint").textContent = v === 0
-        ? "בדיוק 60 המובילים, בלי הגרלה."
-        : `20 המובילים קבועים, כ-${NEW_SONGS[v]} שירים חדשים בכל הרצה (מתוך 200 המובילים). ` +
-          `עולה כ-${(NEW_SONGS[v] * 100).toLocaleString("he-IL")} יחידות מכסה מתוך 10,000 ביום.`;
+        ? "בדיוק 60 המובילים, בלי הגרלה (זהה לרשימה הקודמת אם הדירוג לא השתנה)."
+        : `20 המובילים תמיד בפנים. השאר מוגרלים מתוך 200 המובילים, ` +
+          `כ-${NEW_SONGS[v]} מהם לא היו ברשימה הקודמת של אותו נושא.`;
     }
     $("variety").addEventListener("input", showVariety);
     showVariety();
@@ -219,7 +215,9 @@
           pollTimer = null;
           const last = runs[0];
           if (last && last.conclusion === "success") say("ההרצה האחרונה הסתיימה בהצלחה", "ok");
-          else if (last && last.conclusion === "failure") say("ההרצה האחרונה נכשלה – ראה פרטים", "bad");
+          else if (last && last.conclusion === "failure")
+            say("ההרצה האחרונה נכשלה. בדרך כלל זו המכסה היומית של YouTube, שמתאפסת ב-10:00 בבוקר. " +
+                "הרצה חוזרת אחרי זה ממשיכה מאיפה שנעצרה. הסיבה המדויקת: 'פרטים'.", "bad");
         }
       } catch (e) {
         say(e.message, "bad");
@@ -231,7 +229,7 @@
       $("run").disabled = true;
       say("מפעיל…");
       try {
-        await api({ action: "run", mode: $("mode").value, topic: $("topic").value, years: $("years").value,
+        await api({ action: "run", topic: $("topic").value, years: $("years").value,
                     variety: $("variety").value });
         say("ההרצה התחילה. זה לוקח כמה דקות.", "ok");
         setTimeout(refresh, 4000); // GitHub needs a moment to list the new run

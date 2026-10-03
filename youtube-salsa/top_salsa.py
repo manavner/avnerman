@@ -6,10 +6,11 @@
 2. Read every playlist's videos (private/deleted/blocked playlists are skipped and logged).
 3. Rank songs by number of playlists they appear in, views as tie-breaker.
    Versions of the same song (same normalized artist + title) are merged.
-4. Write the full ranking to CSV and sync the private playlist with the top 60
-   (created on the first run, then only changed songs are added/removed/moved).
+4. Write the full ranking to CSV, pick 60 songs (the top 20 + a weighted draw, see choose) and create a
+   NEW private playlist with them. Earlier playlists are never changed.
 
 Usage:  python top_salsa.py [--dry-run] [--topic tango | --topic "rueda de casino, casino timba"] [--years 3]
+                            [--variety 0-10]
 Runs on GitHub Actions too (.github/workflows/top-salsa.yml), started from /salsa.html on the site.
 """
 import argparse
@@ -25,6 +26,7 @@ import unicodedata
 import urllib.parse
 import urllib.request
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 
 from google.auth.transport.requests import Request
@@ -37,9 +39,9 @@ MAX_PLAYLISTS = 200
 TOP_N = 60
 FIXED_TOP = 20  # always in the playlist; the other TOP_N - FIXED_TOP are drawn from the pool
 POOL = 200  # songs ranked 1..POOL can be drawn
-REPEAT_WEIGHT = 0.3  # a song already in the playlist is this much less likely to be drawn again
+REPEAT_WEIGHT = 0.3  # a song in the topic's previous playlist is this much less likely to be drawn again
 # draw weight = playlist_count ** (VARIETY_K * (10 - variety)). Measured on the salsa ranking:
-# variety 1 ≈ 9 new songs per run, 3 ≈ 13, 5 ≈ 20, 8 ≈ 33, 10 ≈ 38 (100 quota units per new song)
+# variety 1 ≈ 9 songs not in the previous playlist, 3 ≈ 13, 5 ≈ 20, 8 ≈ 33, 10 ≈ 38
 VARIETY_K = 1.5
 MIN_SECONDS, MAX_SECONDS = 120, 720  # drop clips and hour-long mixes
 # a topic word alone gets a few query variations; a preset (or a comma list from the user) is used as-is
@@ -390,133 +392,93 @@ def write_csv(rows):
     log.info("wrote %s (%d rows)", CSV_OUT, len(rows))
 
 
-def playlist_body(title, pid=None):
-    body = {"snippet": {"title": title, "description":
-                        f"Most-listed songs across YouTube playlists for: {', '.join(QUERIES)}."
-                        + (f" Playlists created after {PUBLISHED_AFTER[:10]}." if PUBLISHED_AFTER else "")},
-            "status": {"privacyStatus": "private"}}
-    if pid:
-        body["id"] = pid
-    return body
-
-
-def find_playlist(yt, write=True):
-    """(id, title) of my private playlist for this topic: 'AVNER <Topic> <yyyy-mm-dd>', or the older
-    'Top 60 <Topic>' name (renamed here to the new format, keeping its creation date). None if missing."""
-    current = re.compile(rf"AVNER {re.escape(PLAYLIST_NAME)} \d{{4}}-\d{{2}}-\d{{2}}")
-    token = None
+def my_playlists(yt):
+    """This topic's earlier private playlists, newest first: [(id, title)] named 'AVNER <Topic> <date>[ (n)]'.
+    They are only read, never changed."""
+    pattern = re.compile(rf"AVNER {re.escape(PLAYLIST_NAME)} \d{{4}}-\d{{2}}-\d{{2}}( \(\d+\))?")
+    found, token = [], None
     while True:
         resp = yt.playlists().list(part="snippet,status", mine=True, maxResults=50, pageToken=token).execute()
-        for pl in resp["items"]:
-            title, private = pl["snippet"]["title"], pl["status"]["privacyStatus"] == "private"
-            if private and current.fullmatch(title):
-                return pl["id"], title
-            if private and title == f"Top {TOP_N} {PLAYLIST_NAME}":
-                new = f"AVNER {PLAYLIST_NAME} {pl['snippet']['publishedAt'][:10]}"
-                if write:
-                    yt.playlists().update(part="snippet,status", body=playlist_body(new, pl["id"])).execute()
-                    log.info("renamed %r -> %r", title, new)
-                return pl["id"], new
+        found += [(pl["snippet"]["publishedAt"], pl["id"], pl["snippet"]["title"]) for pl in resp["items"]
+                  if pl["status"]["privacyStatus"] == "private" and pattern.fullmatch(pl["snippet"]["title"])]
         token = resp.get("nextPageToken")
         if not token:
-            return None
+            return [(pid, title) for _, pid, title in sorted(found, reverse=True)]
 
 
-def open_playlist(yt, write=True):
-    """(id, title, [(item id, video id)] in order) of this topic's playlist, or None if there is none yet."""
-    found = find_playlist(yt, write)
-    if not found:
-        return None
-    pid, title = found
-    items, token = [], None
+def playlist_videos(yt, pid):
+    vids, token = [], None
     while True:
         resp = yt.playlistItems().list(part="snippet", playlistId=pid, maxResults=50, pageToken=token).execute()
-        items += [(it["id"], it["snippet"]["resourceId"]["videoId"]) for it in resp["items"]]
+        vids += [it["snippet"]["resourceId"]["videoId"] for it in resp["items"]]
         token = resp.get("nextPageToken")
         if not token:
-            return pid, title, items
+            return vids
 
 
-def choose(rows, variety, current_vids, rng):
-    """The TOP_N songs for this run.
-    - The FIXED_TOP best-ranked songs are always in, at the top.
+def choose(rows, variety, previous_vids, rng):
+    """The TOP_N songs for this run, in rank order.
+    - The FIXED_TOP best-ranked songs are always in.
     - The rest are drawn from ranks FIXED_TOP+1..POOL, weighted by playlist count: variety 0 = exactly the
-      top TOP_N, 10 = almost uniform. Songs already in the playlist weigh REPEAT_WEIGHT as much, so every
-      run brings new songs.
-    - Songs kept from the current playlist stay in their current order and new ones follow by rank,
-      so the sync needs no moves (moves cost quota)."""
+      top TOP_N, 10 = almost uniform. Songs in this topic's previous playlist weigh REPEAT_WEIGHT as much,
+      so each new playlist brings new songs."""
     if variety <= 0:
         return rows[:TOP_N]
     fixed, pool = rows[:FIXED_TOP], rows[FIXED_TOP:POOL]
     alpha = VARIETY_K * (10 - min(variety, 10))
-    current = {v: i for i, v in enumerate(current_vids)}
+    previous = set(previous_vids)
 
     def key(r):  # Efraimidis-Spirakis weighted sampling without replacement
-        w = r["playlists"] ** alpha * (REPEAT_WEIGHT if r["video_id"] in current else 1)
+        w = r["playlists"] ** alpha * (REPEAT_WEIGHT if r["video_id"] in previous else 1)
         return rng.random() ** (1 / w)
 
-    picks = sorted(pool, key=key, reverse=True)[:TOP_N - FIXED_TOP]
-    kept = sorted((r for r in picks if r["video_id"] in current), key=lambda r: current[r["video_id"]])
-    new = sorted((r for r in picks if r["video_id"] not in current), key=lambda r: r["rank"])
-    log.info("variety %s: %d fixed, %d kept, %d new", variety, len(fixed), len(kept), len(new))
-    return fixed + kept + new
+    picks = sorted(sorted(pool, key=key, reverse=True)[:TOP_N - FIXED_TOP], key=lambda r: r["rank"])
+    log.info("variety %s: %d fixed, %d drawn, %d of them not in the previous playlist", variety, len(fixed),
+             len(picks), sum(r["video_id"] not in previous for r in picks))
+    return fixed + picks
 
 
-def sync_playlist(yt, rows, current):
-    """Make the playlist hold exactly rows, in order. Only changed songs cost quota (50 units each)."""
-    if current:
-        pid, title, items = current
-    else:
-        title = f"AVNER {PLAYLIST_NAME} {time.strftime('%Y-%m-%d')}"
-        pid = yt.playlists().insert(part="snippet,status", body=playlist_body(title)).execute()["id"]
-        items = []
-        log.info("created playlist %r (%s)", title, pid)
-    items = list(items)  # [(item id, video id)] in playlist order
+def today():
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Asia/Jerusalem")).strftime("%Y-%m-%d")
+    except Exception:  # no tz database (e.g. Windows without tzdata)
+        return datetime.now().strftime("%Y-%m-%d")
 
-    target = [r["video_id"] for r in rows]
-    removed = added = moved = 0
-    seen = set()
-    for item_id, vid in list(items):  # drop songs that left the top, and duplicates
-        if vid not in target or vid in seen:
-            yt.playlistItems().delete(id=item_id).execute()
-            items.remove((item_id, vid))
-            removed += 1
-        seen.add(vid)
-    for pos, vid in enumerate(target):
-        if pos < len(items) and items[pos][1] == vid:
-            continue
-        body = {"snippet": {"playlistId": pid, "position": pos,
-                            "resourceId": {"kind": "youtube#video", "videoId": vid}}}
-        existing = next((it for it in items if it[1] == vid), None)
-        if existing:
-            body["id"] = existing[0]
-            yt.playlistItems().update(part="snippet", body=body).execute()
-            items.remove(existing)
-            moved += 1
-        else:
-            existing = (yt.playlistItems().insert(part="snippet", body=body).execute()["id"], vid)
-            added += 1
-        items.insert(pos, existing)
+
+def create_playlist(yt, rows, taken_titles):
+    """A new private playlist 'AVNER <Topic> <today>' (' (2)', ' (3)'... if that name exists) holding rows."""
+    title = base = f"AVNER {PLAYLIST_NAME} {today()}"
+    n = 1
+    while title in taken_titles:
+        n += 1
+        title = f"{base} ({n})"
+    pid = yt.playlists().insert(part="snippet,status", body={
+        "snippet": {"title": title, "description":
+                    f"Most-listed songs across YouTube playlists for: {', '.join(QUERIES)}."
+                    + (f" Playlists created after {PUBLISHED_AFTER[:10]}." if PUBLISHED_AFTER else "")},
+        "status": {"privacyStatus": "private"}}).execute()["id"]
+    log.info("created playlist %r (%s)", title, pid)
+    for r in rows:
+        yt.playlistItems().insert(part="snippet", body={"snippet": {
+            "playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": r["video_id"]}}}).execute()
         time.sleep(0.3)
-    log.info("playlist synced: %d added, %d removed, %d moved", added, removed, moved)
     log.info("playlist: https://www.youtube.com/playlist?list=%s", pid)
-    return pid, title, added, removed, moved
+    return pid, title
 
 
-def write_summary(rows, sync=None):
+def write_summary(rows, created=None):
     """Markdown report for the GitHub Actions run page (only when running there)."""
     path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not path:
         return
-    lines = [f"# {sync[1] if sync else 'AVNER ' + PLAYLIST_NAME}", "",
+    lines = [f"# {created[1] if created else 'AVNER ' + PLAYLIST_NAME}", "",
              f"Searches: {', '.join(QUERIES)}. Playlists created "
              + (f"after {PUBLISHED_AFTER[:10]}." if PUBLISHED_AFTER else "at any time."), ""]
-    if sync:
-        pid, _, added, removed, moved = sync
-        lines += [f"Playlist: https://www.youtube.com/playlist?list={pid}",
-                  f"Changes: {added} added, {removed} removed, {moved} moved", ""]
+    if created:
+        lines += [f"New playlist: https://www.youtube.com/playlist?list={created[0]}", ""]
     else:
-        lines += ["Dry run: the YouTube playlist was not changed.", ""]
+        lines += ["Dry run: no playlist was created.", ""]
     lines += ["| # | Rank | Artist | Song | Playlists |", "|---|---|---|---|---|"]
     lines += [f"| {i} | {r['rank']} | {r['artist']} | [{r['title']}](https://www.youtube.com/watch?v={r['video_id']}) "
               f"| {r['playlists']} |" for i, r in enumerate(rows, 1)]
@@ -526,7 +488,7 @@ def write_summary(rows, sync=None):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dry-run", action="store_true", help="rank and write CSV, but do not touch the playlist")
+    ap.add_argument("--dry-run", action="store_true", help="rank and write CSV, but do not create the playlist")
     ap.add_argument("--topic", default="salsa",
                     help="genre to rank, e.g. 'tango', or several searches separated by commas")
     ap.add_argument("--years", type=float, default=0,
@@ -546,13 +508,29 @@ def main():
     finally:
         save_cache()  # keep progress even if quota runs out mid-run
     write_csv(rows)
-    current = open_playlist(yt, write=not args.dry_run)
+    earlier = my_playlists(yt)
+    previous = playlist_videos(yt, earlier[0][0]) if earlier else []
+    if earlier:
+        log.info("previous playlist: %r (%d songs)", earlier[0][1], len(previous))
     seed = args.seed if args.seed is not None else random.randrange(1_000_000)
     log.info("random seed %d", seed)
-    picked = choose(rows, args.variety, [v for _, v in current[2]] if current else [], random.Random(seed))
-    sync = None if args.dry_run else sync_playlist(yt, picked, current)
-    write_summary(picked, sync)
+    picked = choose(rows, args.variety, previous, random.Random(seed))
+    created = None if args.dry_run else create_playlist(yt, picked, {t for _, t in earlier})
+    write_summary(picked, created)
+
+
+QUOTA_MESSAGE = ("The daily YouTube API quota (10,000 units) is used up. It resets at midnight Pacific time "
+                 "(10:00 in Israel). Run again after that: what this run already read is cached and costs nothing.")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except HttpError as e:
+        if not is_quota_error(e):
+            raise
+        log.error(QUOTA_MESSAGE)
+        if os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+                f.write(f"## Quota used up\n\n{QUOTA_MESSAGE}\n")
+        raise SystemExit(2)
