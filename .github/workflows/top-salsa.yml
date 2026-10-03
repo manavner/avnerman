@@ -1,0 +1,73 @@
+# Runs youtube-salsa/top_salsa.py in the cloud. Started from /salsa.html (api/salsa.js) or the Actions tab.
+# Needs repo secrets YT_CLIENT_SECRET_JSON and YT_TOKEN_JSON (contents of client_secret.json / token.json).
+name: Top 60 Salsa
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "update = sync the YouTube playlist, dry-run = ranking only"
+        type: choice
+        options: [update, dry-run]
+        default: update
+
+concurrency:
+  group: top-salsa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: youtube-salsa
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: youtube-salsa/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      # API responses are cached for the current ISO week: reruns in the same week cost ~3 quota units,
+      # the first run of a new week fetches fresh data (~2,000 units).
+      - id: week
+        run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: youtube-salsa/cache.json
+          key: salsa-cache-${{ steps.week.outputs.week }}-${{ github.run_id }}
+          restore-keys: salsa-cache-${{ steps.week.outputs.week }}-
+
+      - name: Write Google credentials
+        env:
+          CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET_JSON }}
+          TOKEN: ${{ secrets.YT_TOKEN_JSON }}
+        run: |
+          printf '%s' "$CLIENT_SECRET" > client_secret.json
+          printf '%s' "$TOKEN" > token.json
+
+      - name: Rank and sync
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          if [ "$MODE" = "dry-run" ]; then python top_salsa.py --dry-run; else python top_salsa.py; fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: salsa-ranking
+          path: youtube-salsa/salsa_ranking.csv
+          if-no-files-found: ignore
+
+      - name: Remove credentials
+        if: always()
+        run: rm -f client_secret.json token.json

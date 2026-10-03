@@ -5,6 +5,9 @@
     },
     "api/oauth-callback.js": {
       "maxDuration": 30
+    },
+    "api/salsa.js": {
+      "maxDuration": 15
     }
   }
 }

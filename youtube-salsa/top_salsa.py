@@ -5,15 +5,18 @@
 2. Read every playlist's videos (private/deleted/blocked playlists are skipped and logged).
 3. Rank songs by number of playlists they appear in, views as tie-breaker.
    Versions of the same song (same normalized artist + title) are merged.
-4. Create a private playlist with the top 60 and write the full ranking to CSV.
+4. Write the full ranking to CSV and sync the private playlist with the top 60
+   (created on the first run, then only changed songs are added/removed/moved).
 
 Usage:  python top_salsa.py [--dry-run]
+Runs on GitHub Actions too (.github/workflows/top-salsa.yml), started from /salsa.html on the site.
 """
 import argparse
 import csv
 import html
 import json
 import logging
+import os
 import re
 import time
 import unicodedata
@@ -70,6 +73,8 @@ def get_service():
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
+        elif os.environ.get("CI"):  # no browser on a server: the token secret must be renewed by hand
+            raise SystemExit("token.json is missing or revoked; run the script once locally and update the secret")
         else:
             creds = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET, SCOPES).run_local_server(port=0)
         TOKEN.write_text(creds.to_json())
@@ -325,20 +330,87 @@ def write_csv(rows):
     log.info("wrote %s (%d rows)", CSV_OUT, len(rows))
 
 
-def create_playlist(yt, rows):
-    pl = yt.playlists().insert(part="snippet,status", body={
-        "snippet": {"title": PLAYLIST_TITLE, "description": "Most-listed salsa songs across YouTube playlists."},
-        "status": {"privacyStatus": "private"}}).execute()
-    for r in rows:
-        yt.playlistItems().insert(part="snippet", body={"snippet": {
-            "playlistId": pl["id"], "resourceId": {"kind": "youtube#video", "videoId": r["video_id"]}}}).execute()
+def find_playlist(yt):
+    """Id of my existing private playlist named PLAYLIST_TITLE, or None."""
+    token = None
+    while True:
+        resp = yt.playlists().list(part="snippet,status", mine=True, maxResults=50, pageToken=token).execute()
+        for pl in resp["items"]:
+            if pl["snippet"]["title"] == PLAYLIST_TITLE and pl["status"]["privacyStatus"] == "private":
+                return pl["id"]
+        token = resp.get("nextPageToken")
+        if not token:
+            return None
+
+
+def sync_playlist(yt, rows):
+    """Make the playlist hold exactly rows, in order. Only changed songs cost quota (50 units each)."""
+    pid = find_playlist(yt)
+    if pid is None:
+        pid = yt.playlists().insert(part="snippet,status", body={
+            "snippet": {"title": PLAYLIST_TITLE, "description": "Most-listed salsa songs across YouTube playlists."},
+            "status": {"privacyStatus": "private"}}).execute()["id"]
+        log.info("created playlist %s", pid)
+    items, token = [], None  # [(item id, video id)] in playlist order
+    while True:
+        resp = yt.playlistItems().list(part="snippet", playlistId=pid, maxResults=50, pageToken=token).execute()
+        items += [(it["id"], it["snippet"]["resourceId"]["videoId"]) for it in resp["items"]]
+        token = resp.get("nextPageToken")
+        if not token:
+            break
+
+    target = [r["video_id"] for r in rows]
+    removed = added = moved = 0
+    seen = set()
+    for item_id, vid in list(items):  # drop songs that left the top, and duplicates
+        if vid not in target or vid in seen:
+            yt.playlistItems().delete(id=item_id).execute()
+            items.remove((item_id, vid))
+            removed += 1
+        seen.add(vid)
+    for pos, vid in enumerate(target):
+        if pos < len(items) and items[pos][1] == vid:
+            continue
+        body = {"snippet": {"playlistId": pid, "position": pos,
+                            "resourceId": {"kind": "youtube#video", "videoId": vid}}}
+        existing = next((it for it in items if it[1] == vid), None)
+        if existing:
+            body["id"] = existing[0]
+            yt.playlistItems().update(part="snippet", body=body).execute()
+            items.remove(existing)
+            moved += 1
+        else:
+            existing = (yt.playlistItems().insert(part="snippet", body=body).execute()["id"], vid)
+            added += 1
+        items.insert(pos, existing)
         time.sleep(0.3)
-    log.info("playlist: https://www.youtube.com/playlist?list=%s", pl["id"])
+    log.info("playlist synced: %d added, %d removed, %d moved", added, removed, moved)
+    log.info("playlist: https://www.youtube.com/playlist?list=%s", pid)
+    return pid, added, removed, moved
+
+
+def write_summary(rows, sync=None):
+    """Markdown report for the GitHub Actions run page (only when running there)."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    lines = ["# Top 60 Salsa", ""]
+    if sync:
+        pid, added, removed, moved = sync
+        lines += [f"Playlist: https://www.youtube.com/playlist?list={pid}",
+                  f"Changes: {added} added, {removed} removed, {moved} moved", ""]
+    else:
+        lines += ["Dry run: the YouTube playlist was not changed.", ""]
+    lines += ["| # | Artist | Song | Playlists |", "|---|---|---|---|"]
+    lines += [f"| {i} | {r['artist']} | [{r['title']}](https://www.youtube.com/watch?v={r['video_id']}) "
+              f"| {r['playlists']} |" for i, r in enumerate(rows, 1)]
+    with open(path, "a", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dry-run", action="store_true", help="rank and write CSV, but do not create the playlist")
+    ap.add_argument("--dry-run", action="store_true", help="rank and write CSV, but do not touch the playlist")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                         handlers=[logging.StreamHandler(), logging.FileHandler(HERE / "run.log", encoding="utf-8")])
@@ -349,8 +421,8 @@ def main():
     finally:
         save_cache()  # keep progress even if quota runs out mid-run
     write_csv(rows)
-    if not args.dry_run:
-        create_playlist(yt, rows[:TOP_N])
+    sync = None if args.dry_run else sync_playlist(yt, rows[:TOP_N])
+    write_summary(rows[:TOP_N], sync)
 
 
 if __name__ == "__main__":
