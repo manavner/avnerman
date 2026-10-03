@@ -7,10 +7,10 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "update = sync the YouTube playlist, dry-run = ranking only"
+        description: "create = a new YouTube playlist (earlier ones are never changed), dry-run = ranking only"
         type: choice
-        options: [update, dry-run]
-        default: update
+        options: [create, dry-run]
+        default: create
       topic:
         description: "Genre, e.g. salsa, tango, rueda, reggaeton (Hebrew is fine), or searches separated by commas"
         type: string
@@ -20,7 +20,7 @@ on:
         type: string
         default: ""
       variety:
-        description: "0 = exactly the top 60; 1-10 = the top 20 stay, the rest is drawn (1 ≈ 9 new songs, 5 ≈ 20, 10 ≈ 38)"
+        description: "0 = exactly the top 60; 1-10 = top 20 + a draw (vs the previous playlist: 1 ≈ 9 new songs, 5 ≈ 20, 10 ≈ 38)"
         type: string
         default: "5"
 
@@ -54,7 +54,7 @@ jobs:
       - id: week
         run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         with:
           path: youtube-salsa/cache.json
           key: salsa-cache-${{ steps.week.outputs.week }}-${{ github.run_id }}
@@ -68,7 +68,7 @@ jobs:
           printf '%s' "$CLIENT_SECRET" > client_secret.json
           printf '%s' "$TOKEN" > token.json
 
-      - name: Rank and sync
+      - name: Rank and create playlist
         env:
           MODE: ${{ inputs.mode }}
           TOPIC: ${{ inputs.topic }}
@@ -78,6 +78,14 @@ jobs:
           args=(--topic "${TOPIC:-salsa}" --years "${YEARS:-0}" --variety "${VARIETY:-5}")
           if [ "$MODE" = "dry-run" ]; then args+=(--dry-run); fi
           python top_salsa.py "${args[@]}"
+
+      # saved even when the run fails (e.g. daily quota used up), so the next run doesn't pay again
+      # for what this one already read
+      - uses: actions/cache/save@v4
+        if: always() && hashFiles('youtube-salsa/cache.json') != ''
+        with:
+          path: youtube-salsa/cache.json
+          key: salsa-cache-${{ steps.week.outputs.week }}-${{ github.run_id }}
 
       - uses: actions/upload-artifact@v4
         if: always()
